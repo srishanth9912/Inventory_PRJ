@@ -160,23 +160,22 @@ function AddStockScreen({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const [unit, setUnit] = useState<'box' | 'piece'>('box');
   const [qty, setQty] = useState<number | string>(1);
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
-  const numQty = qty === '' ? 1 : Number(qty);
-  const pieces = unit === 'box' ? numQty * product.boxSize : numQty;
+  const numQty = qty === '' ? 0 : Number(qty);
+  const pieces = Math.max(0, numQty);
 
   const save = async () => {
     const parsed = Number(qty);
     if (!parsed || parsed <= 0) {
-      setErr('Enter a valid quantity');
+      setErr('Quantity must be greater than 0');
       return;
     }
     setSaving(true);
     setErr('');
     try {
-      await api.addStock(product.id, unit, parsed);
+      await api.addStock(product.id, 'piece', parsed);
       onSaved();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Failed');
@@ -194,39 +193,28 @@ function AddStockScreen({
       <Card className="space-y-4">
         <div className="font-bold text-lg">{product.name}</div>
         <div>
-          <div className="text-sm text-slate-500 mb-1">Unit</div>
-          <Toggle
-            options={[
-              ['box', `Box (${product.boxSize} pcs)`],
-              ['piece', 'Piece'],
-            ]}
-            value={unit}
-            onChange={(v) => setUnit(v as 'box' | 'piece')}
-          />
-        </div>
-        <div>
-          <div className="text-sm text-slate-500 mb-1">Quantity</div>
+          <div className="text-sm text-slate-500 mb-1">Quantity (pieces)</div>
           <div className="flex items-center justify-center gap-4">
             <button
               type="button"
-              className="w-12 h-12 rounded-full bg-slate-100 text-2xl"
-              onClick={() => setQty(Math.max(1, (Number(qty) || 1) - 1))}
+              className="w-12 h-12 rounded-full bg-slate-100 text-2xl font-bold text-slate-700 active:scale-95 transition"
+              onClick={() => setQty(Math.max(0, (Number(qty) || 0) - 1))}
             >
               −
             </button>
             <input
               type="number"
-              min={1}
+              min={0}
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               onBlur={() => {
-                if (qty === '' || Number(qty) < 1) setQty(1);
+                if (qty === '' || Number(qty) < 0) setQty(0);
               }}
               className="w-24 text-center text-3xl font-bold border rounded-xl py-2"
             />
             <button
               type="button"
-              className="w-12 h-12 rounded-full bg-slate-100 text-2xl"
+              className="w-12 h-12 rounded-full bg-slate-100 text-2xl font-bold text-slate-700 active:scale-95 transition"
               onClick={() => setQty((Number(qty) || 0) + 1)}
             >
               +
@@ -241,9 +229,18 @@ function AddStockScreen({
           </div>
         </div>
         {err && <div className="text-red-600 text-sm">{err}</div>}
-        <Btn onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Add Stock'}
-        </Btn>
+        <div className="flex gap-3">
+          <Btn secondary type="button" onClick={onBack} className="flex-1">
+            Cancel
+          </Btn>
+          <Btn
+            onClick={save}
+            disabled={saving || !Number(qty) || Number(qty) <= 0}
+            className="flex-1"
+          >
+            {saving ? 'Saving…' : 'Add Stock'}
+          </Btn>
+        </div>
       </Card>
     </>
   );
@@ -262,22 +259,24 @@ function EditProductScreen({
   const [desc, setDesc] = useState(product.description);
   const [price, setPrice] = useState<number | string>(product.defaultPricePerPiece);
   const [boxSize, setBoxSize] = useState<number | string>(product.boxSize);
-  const [stock, setStock] = useState<number | string>(product.currentStock);
   const [low, setLow] = useState<number | string>(product.lowStockLimit);
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
+    if (!name.trim()) {
+      setErr('Product name cannot be empty');
+      return;
+    }
     setSaving(true);
     setErr('');
     try {
       await api.updateProduct(product.id, {
-        name,
+        name: name.trim(),
         description: desc,
-        defaultPricePerPiece: Number(price),
-        boxSize: Number(boxSize),
-        currentStock: Number(stock),
-        lowStockLimit: Number(low),
+        defaultPricePerPiece: Math.max(0, Number(price) || 0),
+        boxSize: Math.max(1, Number(boxSize) || 1),
+        lowStockLimit: Math.max(0, Number(low) || 0),
       });
       onSaved();
     } catch (e: unknown) {
@@ -314,6 +313,7 @@ function EditProductScreen({
           <span className="text-sm text-slate-500">Default price per piece (₹)</span>
           <input
             type="number"
+            min={0}
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             className="w-full border rounded-xl p-3 mt-1"
@@ -323,27 +323,17 @@ function EditProductScreen({
           <span className="text-sm text-slate-500">Pieces in one box</span>
           <input
             type="number"
+            min={1}
             value={boxSize}
             onChange={(e) => setBoxSize(e.target.value)}
             className="w-full border rounded-xl p-3 mt-1"
           />
         </label>
         <label className="block">
-          <span className="text-sm text-slate-500">Current stock (pieces)</span>
-          <input
-            type="number"
-            value={stock}
-            onChange={(e) => setStock(e.target.value)}
-            className="w-full border rounded-xl p-3 mt-1"
-          />
-          <div className="text-xs text-slate-400 mt-1">
-            You can directly correct the stock number here.
-          </div>
-        </label>
-        <label className="block">
           <span className="text-sm text-slate-500">Low stock warning at (pieces)</span>
           <input
             type="number"
+            min={0}
             value={low}
             onChange={(e) => setLow(e.target.value)}
             className="w-full border rounded-xl p-3 mt-1"
