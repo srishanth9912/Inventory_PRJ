@@ -53,7 +53,7 @@ app.addHook('onRequest', async (req, reply) => {
   if (req.method === 'OPTIONS') return;
   if (req.url === '/health') return;
   const key = process.env.API_KEY;
-  if (key && req.headers['x-api-key'] !== key) {
+  if (!key || req.headers['x-api-key'] !== key) {
     return reply.code(401).send({ error: 'Unauthorized' });
   }
 });
@@ -73,6 +73,19 @@ app.patch('/products/:id', async (req: any, reply) => {
   const current = await products.findOne({ id });
   if (!current) return bad(reply, 'Product not found', 404);
 
+  if (body.boxSize !== undefined && (!Number.isInteger(+body.boxSize) || +body.boxSize < 1)) {
+    return bad(reply, 'Box size must be an integer greater than 0');
+  }
+  if (body.defaultPricePerPiece !== undefined && (Number.isNaN(+body.defaultPricePerPiece) || +body.defaultPricePerPiece < 0)) {
+    return bad(reply, 'Default price per piece cannot be negative');
+  }
+  if (body.currentStock !== undefined && (!Number.isInteger(+body.currentStock) || +body.currentStock < 0)) {
+    return bad(reply, 'Current stock must be a non-negative integer');
+  }
+  if (body.lowStockLimit !== undefined && (!Number.isInteger(+body.lowStockLimit) || +body.lowStockLimit < 0)) {
+    return bad(reply, 'Low stock limit must be a non-negative integer');
+  }
+
   const allowed = [
     'name',
     'description',
@@ -84,16 +97,23 @@ app.patch('/products/:id', async (req: any, reply) => {
   ];
   const update: Record<string, unknown> = { updatedAt: Date.now() };
   for (const k of allowed) {
-    if (body[k] !== undefined) update[k] = body[k];
+    if (body[k] !== undefined) {
+      if (k === 'boxSize' || k === 'currentStock' || k === 'lowStockLimit' || k === 'defaultPricePerPiece') {
+        update[k] = +body[k];
+      } else {
+        update[k] = body[k];
+      }
+    }
   }
 
-  if (body.currentStock !== undefined && body.currentStock !== current.currentStock) {
+  if (body.currentStock !== undefined && +body.currentStock !== current.currentStock) {
+    const diff = +body.currentStock - current.currentStock;
     await stockLog.insertOne({
       productId: id,
       type: 'manual_edit',
-      pieces: body.currentStock - current.currentStock,
+      pieces: diff,
       oldStock: current.currentStock,
-      newStock: body.currentStock,
+      newStock: +body.currentStock,
       at: Date.now(),
     });
   }
@@ -110,13 +130,14 @@ app.get('/stock/log', async (req: any) => {
 
 app.post('/stock/add', async (req: any, reply) => {
   const { productId, unit, quantity } = req.body || {};
-  if (!productId || !quantity || quantity <= 0) {
-    return bad(reply, 'Invalid quantity');
+  const qty = +quantity;
+  if (!productId || !qty || qty <= 0 || !Number.isInteger(qty)) {
+    return bad(reply, 'Invalid quantity. Must be a positive integer.');
   }
   const p = await products.findOne({ id: productId });
   if (!p) return bad(reply, 'Product not found', 404);
 
-  const pieces = unit === 'box' ? quantity * p.boxSize : quantity;
+  const pieces = unit === 'box' ? qty * p.boxSize : qty;
   const now = Date.now();
 
   await products.updateOne(
@@ -126,8 +147,8 @@ app.post('/stock/add', async (req: any, reply) => {
   await stockLog.insertOne({
     productId,
     type: 'add',
-    unit,
-    quantity,
+    unit: unit === 'box' ? 'box' : 'piece',
+    quantity: qty,
     pieces,
     at: now,
   });
@@ -150,15 +171,17 @@ app.post('/sales', async (req: any, reply) => {
 
   const now = Date.now();
   const lineItems: any[] = [];
+  const neededPerProduct: Record<string, number> = {};
   let totalAmount = 0;
 
-  // Validate & calculate everything on server
   for (const item of items) {
     const p = await products.findOne({ id: item.productId });
     if (!p) return bad(reply, `Product ${item.productId} not found`, 404);
 
     const qty = +item.quantity;
-    if (!qty || qty <= 0) return bad(reply, 'Invalid quantity');
+    if (!qty || qty <= 0 || !Number.isInteger(qty)) {
+      return bad(reply, `Invalid quantity for ${p.name}`);
+    }
 
     const unit = item.unit === 'box' ? 'box' : 'piece';
     const pieces = unit === 'box' ? qty * p.boxSize : qty;
@@ -168,15 +191,10 @@ app.post('/sales', async (req: any, reply) => {
       return bad(reply, 'Price cannot be negative');
     }
 
-    if (p.currentStock < pieces) {
-      return bad(
-        reply,
-        `Not enough stock for ${p.name}. Available: ${p.currentStock} pieces`
-      );
-    }
-
     const lineTotal = pieces * price;
     totalAmount += lineTotal;
+
+    neededPerProduct[p.id] = (neededPerProduct[p.id] || 0) + pieces;
 
     lineItems.push({
       productId: p.id,
@@ -189,12 +207,31 @@ app.post('/sales', async (req: any, reply) => {
     });
   }
 
-  // Deduct stock + create sale
-  for (const li of lineItems) {
-    await products.updateOne(
-      { id: li.productId },
-      { $inc: { currentStock: -li.pieces }, $set: { updatedAt: now } }
+  const deducted: Array<{ productId: string; pieces: number }> = [];
+  for (const [prodId, requiredPieces] of Object.entries(neededPerProduct)) {
+    const res = await products.updateOne(
+      { id: prodId, currentStock: { $gte: requiredPieces } },
+      { $inc: { currentStock: -requiredPieces }, $set: { updatedAt: now } }
     );
+
+    if (res.modifiedCount === 0) {
+      for (const d of deducted) {
+        await products.updateOne(
+          { id: d.productId },
+          { $inc: { currentStock: d.pieces } }
+        );
+      }
+      const p = await products.findOne({ id: prodId });
+      const avail = p ? p.currentStock : 0;
+      return bad(
+        reply,
+        `Not enough stock for ${p?.name || prodId}. Available: ${avail} pieces.`
+      );
+    }
+    deducted.push({ productId: prodId, pieces: requiredPieces });
+  }
+
+  for (const li of lineItems) {
     await stockLog.insertOne({
       productId: li.productId,
       type: 'sale',
