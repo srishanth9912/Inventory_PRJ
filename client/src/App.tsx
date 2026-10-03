@@ -486,76 +486,116 @@ function NewSaleScreen({
                   </div>
                 </label>
                 {isOn && (
-                  <div className="mt-3 pt-3 border-t border-teal-100 space-y-3">
-                    <Toggle
-                      options={[
-                        ['box', `Box (${p.boxSize} pcs)`],
-                        ['piece', 'Piece'],
-                      ]}
-                      value={currentUnit}
-                      onChange={(v) =>
-                        setUnits((u) => ({ ...u, [p.id]: v as 'box' | 'piece' }))
-                      }
-                    />
-                    <div className="flex items-center justify-center gap-4">
-                      <button
-                        type="button"
-                        className="w-10 h-10 rounded-full bg-white border text-xl"
-                        onClick={() =>
-                          setQtys((q) => ({
-                            ...q,
-                            [p.id]: Math.max(1, (Number(q[p.id]) || 1) - 1),
-                          }))
-                        }
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        value={currentQty}
-                        onChange={(e) =>
-                          setQtys((q) => ({
-                            ...q,
-                            [p.id]: e.target.value,
-                          }))
-                        }
-                        onBlur={() => {
-                          if (currentQty === '' || Number(currentQty) < 1) {
-                            setQtys((q) => ({ ...q, [p.id]: 1 }));
-                          }
-                        }}
-                        className="w-20 text-center text-2xl font-bold border rounded-xl py-1 bg-white"
-                      />
-                      <button
-                        type="button"
-                        className="w-10 h-10 rounded-full bg-white border text-xl"
-                        onClick={() =>
-                          setQtys((q) => ({
-                            ...q,
-                            [p.id]: (Number(q[p.id]) || 0) + 1,
-                          }))
-                        }
-                      >
-                        +
-                      </button>
+                  <div className="mt-3 pt-3 border-t border-teal-100 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1 font-medium">Unit</div>
+                        <div className="flex rounded-lg border border-slate-200 overflow-hidden bg-white h-10 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setUnits((u) => ({ ...u, [p.id]: 'box' }))}
+                            className={`flex-1 rounded-md text-xs font-semibold transition ${
+                              currentUnit === 'box'
+                                ? 'bg-teal-700 text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            Box ({p.boxSize})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUnits((u) => ({ ...u, [p.id]: 'piece' }))}
+                            className={`flex-1 rounded-md text-xs font-semibold transition ${
+                              currentUnit === 'piece'
+                                ? 'bg-teal-700 text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            Piece
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1 font-medium">Quantity</div>
+                        <div className="flex items-center justify-between border border-slate-200 rounded-lg bg-white h-10 px-1">
+                          <button
+                            type="button"
+                            className="w-8 h-8 rounded text-slate-600 hover:bg-slate-100 font-bold text-lg active:scale-95 flex items-center justify-center"
+                            onClick={() => {
+                              const cur = Number(qtys[p.id]) || 1;
+                              if (cur <= 1) {
+                                setSelected((s) => ({ ...s, [p.id]: false }));
+                                setQtys((q) => ({ ...q, [p.id]: 1 }));
+                              } else {
+                                setQtys((q) => ({ ...q, [p.id]: cur - 1 }));
+                              }
+                            }}
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={0}
+                            value={currentQty}
+                            onChange={(e) =>
+                              setQtys((q) => ({
+                                ...q,
+                                [p.id]: e.target.value,
+                              }))
+                            }
+                            onBlur={() => {
+                              if (currentQty === '' || Number(currentQty) <= 0) {
+                                setSelected((s) => ({ ...s, [p.id]: false }));
+                                setQtys((q) => ({ ...q, [p.id]: 1 }));
+                              }
+                            }}
+                            className="w-12 text-center font-bold text-base bg-transparent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            className="w-8 h-8 rounded text-slate-600 hover:bg-slate-100 font-bold text-lg active:scale-95 flex items-center justify-center"
+                            onClick={() =>
+                              setQtys((q) => ({
+                                ...q,
+                                [p.id]: (Number(q[p.id]) || 0) + 1,
+                              }))
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <label className="block">
-                      <span className="text-sm text-slate-500">
-                        Price per piece (₹) — leave default or change
-                      </span>
-                      <input
-                        type="number"
-                        value={rawPrice !== undefined ? rawPrice : p.defaultPricePerPiece}
-                        onChange={(e) =>
-                          setPrices((pr) => ({ ...pr, [p.id]: e.target.value }))
-                        }
-                        className="w-full border rounded-xl p-2.5 mt-1 bg-white"
-                      />
-                    </label>
-                    <div className="text-sm text-center text-slate-600">
-                      = <b>{calculatedPieces} pieces</b> · Line total{' '}
-                      <b className="text-teal-700">{inr(calculatedPieces * activePrice)}</b>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1 font-medium">Rate (₹ / piece)</div>
+                        <div className="flex items-center border border-slate-200 rounded-lg bg-white h-10 px-2.5 focus-within:ring-2 focus-within:ring-teal-600 focus-within:border-teal-600 shadow-sm transition">
+                          <span className="text-slate-400 font-semibold text-sm mr-1">₹</span>
+                          <input
+                            type="number"
+                            value={rawPrice !== undefined ? rawPrice : p.defaultPricePerPiece}
+                            onChange={(e) =>
+                              setPrices((pr) => ({ ...pr, [p.id]: e.target.value }))
+                            }
+                            className="w-full font-bold text-slate-800 text-sm bg-transparent focus:outline-none"
+                            placeholder={`${p.defaultPricePerPiece}`}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1 font-medium">Item Total</div>
+                        <div className="flex items-center justify-between border border-teal-200 bg-teal-50/80 rounded-lg h-10 px-3">
+                          <span className="text-xs text-slate-500 font-medium">
+                            {calculatedPieces} pcs
+                          </span>
+                          <span className="text-sm font-bold text-teal-800">
+                            {inr(calculatedPieces * activePrice)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

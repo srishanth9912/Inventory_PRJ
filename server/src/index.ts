@@ -23,7 +23,7 @@ const SEED = [
     id: 'detergent',
     name: 'IFB Liquid Detergent',
     description: '945 ml',
-    imageUrl: '/products/detergent.svg',
+    imageUrl: '/products/detergent.jpg',
     defaultPricePerPiece: 40,
     boxSize: 10,
     currentStock: 0,
@@ -34,7 +34,7 @@ const SEED = [
     id: 'descal',
     name: 'IFB Descal',
     description: '100 g',
-    imageUrl: '/products/descal.svg',
+    imageUrl: '/products/descal.jpg',
     defaultPricePerPiece: 200,
     boxSize: 10,
     currentStock: 0,
@@ -45,6 +45,7 @@ const SEED = [
 
 for (const p of SEED) {
   await products.updateOne({ id: p.id }, { $setOnInsert: p }, { upsert: true });
+  await products.updateOne({ id: p.id }, { $set: { imageUrl: p.imageUrl } });
 }
 
 // Auth
