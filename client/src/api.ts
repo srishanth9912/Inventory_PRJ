@@ -34,6 +34,7 @@ export const api = {
   createSale: (data: any) =>
     req('/sales', { method: 'POST', body: JSON.stringify(data) }),
   getStats: () => req('/stats'),
+  getStockLog: (limit = 30) => req(`/stock/log?limit=${limit}`),
 };
 
 export function inr(n: number) {

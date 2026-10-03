@@ -69,6 +69,9 @@ app.get('/products', async () => {
 app.patch('/products/:id', async (req: any, reply) => {
   const { id } = req.params;
   const body = req.body || {};
+  const current = await products.findOne({ id });
+  if (!current) return bad(reply, 'Product not found', 404);
+
   const allowed = [
     'name',
     'description',
@@ -82,12 +85,28 @@ app.patch('/products/:id', async (req: any, reply) => {
   for (const k of allowed) {
     if (body[k] !== undefined) update[k] = body[k];
   }
-  const r = await products.updateOne({ id }, { $set: update });
-  if (r.matchedCount === 0) return bad(reply, 'Product not found', 404);
+
+  if (body.currentStock !== undefined && body.currentStock !== current.currentStock) {
+    await stockLog.insertOne({
+      productId: id,
+      type: 'manual_edit',
+      pieces: body.currentStock - current.currentStock,
+      oldStock: current.currentStock,
+      newStock: body.currentStock,
+      at: Date.now(),
+    });
+  }
+
+  await products.updateOne({ id }, { $set: update });
   return products.findOne({ id });
 });
 
 // ---------- Stock ----------
+app.get('/stock/log', async (req: any) => {
+  const limit = Math.min(+(req.query.limit || 30), 100);
+  return stockLog.find({}).sort({ at: -1 }).limit(limit).toArray();
+});
+
 app.post('/stock/add', async (req: any, reply) => {
   const { productId, unit, quantity } = req.body || {};
   if (!productId || !quantity || quantity <= 0) {

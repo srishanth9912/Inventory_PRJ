@@ -32,6 +32,18 @@ type Sale = {
   soldAt: number;
 };
 
+type StockLogItem = {
+  _id: string;
+  productId: string;
+  type: 'add' | 'sale' | 'manual_edit';
+  unit?: string;
+  quantity?: number;
+  pieces: number;
+  oldStock?: number;
+  newStock?: number;
+  at: number;
+};
+
 type Stats = {
   products: Product[];
   month: {
@@ -152,20 +164,22 @@ function AddStockScreen({
   onSaved: () => void;
 }) {
   const [unit, setUnit] = useState<'box' | 'piece'>('box');
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState<number | string>(1);
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
-  const pieces = unit === 'box' ? qty * product.boxSize : qty;
+  const numQty = qty === '' ? 1 : Number(qty);
+  const pieces = unit === 'box' ? numQty * product.boxSize : numQty;
 
   const save = async () => {
-    if (qty <= 0) {
+    const parsed = Number(qty);
+    if (!parsed || parsed <= 0) {
       setErr('Enter a valid quantity');
       return;
     }
     setSaving(true);
     setErr('');
     try {
-      await api.addStock(product.id, unit, qty);
+      await api.addStock(product.id, unit, parsed);
       onSaved();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Failed');
@@ -196,18 +210,43 @@ function AddStockScreen({
         <div>
           <div className="text-sm text-slate-500 mb-1">Quantity</div>
           <div className="flex items-center justify-center gap-4">
-            <button type="button" className="w-12 h-12 rounded-full bg-slate-100 text-2xl" onClick={() => setQty(Math.max(1, qty - 1))}>−</button>
-            <input type="number" min={1} value={qty || ''} onChange={(e) => setQty(Number(e.target.value))} className="w-24 text-center text-3xl font-bold border rounded-xl py-2" />
-            <button type="button" className="w-12 h-12 rounded-full bg-slate-100 text-2xl" onClick={() => setQty(qty + 1)}>+</button>
+            <button
+              type="button"
+              className="w-12 h-12 rounded-full bg-slate-100 text-2xl"
+              onClick={() => setQty(Math.max(1, (Number(qty) || 1) - 1))}
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min={1}
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              onBlur={() => {
+                if (qty === '' || Number(qty) < 1) setQty(1);
+              }}
+              className="w-24 text-center text-3xl font-bold border rounded-xl py-2"
+            />
+            <button
+              type="button"
+              className="w-12 h-12 rounded-full bg-slate-100 text-2xl"
+              onClick={() => setQty((Number(qty) || 0) + 1)}
+            >
+              +
+            </button>
           </div>
         </div>
         <div className="bg-slate-50 rounded-xl p-3 text-center">
           <div className="text-slate-600">You are adding</div>
           <div className="text-2xl font-bold text-teal-700">{pieces} pieces</div>
-          <div className="text-sm text-slate-500 mt-1">Current: {product.currentStock} → After: {product.currentStock + pieces}</div>
+          <div className="text-sm text-slate-500 mt-1">
+            Current: {product.currentStock} → After: {product.currentStock + pieces}
+          </div>
         </div>
         {err && <div className="text-red-600 text-sm">{err}</div>}
-        <Btn onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Add Stock'}</Btn>
+        <Btn onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Add Stock'}
+        </Btn>
       </Card>
     </>
   );
@@ -224,10 +263,10 @@ function EditProductScreen({
 }) {
   const [name, setName] = useState(product.name);
   const [desc, setDesc] = useState(product.description);
-  const [price, setPrice] = useState(product.defaultPricePerPiece);
-  const [boxSize, setBoxSize] = useState(product.boxSize);
-  const [stock, setStock] = useState(product.currentStock);
-  const [low, setLow] = useState(product.lowStockLimit);
+  const [price, setPrice] = useState<number | string>(product.defaultPricePerPiece);
+  const [boxSize, setBoxSize] = useState<number | string>(product.boxSize);
+  const [stock, setStock] = useState<number | string>(product.currentStock);
+  const [low, setLow] = useState<number | string>(product.lowStockLimit);
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -253,24 +292,70 @@ function EditProductScreen({
 
   return (
     <>
-      <button onClick={onBack} className="text-teal-700 mb-2 font-medium">← Back</button>
+      <button onClick={onBack} className="text-teal-700 mb-2 font-medium">
+        ← Back
+      </button>
       <Title>Edit Product</Title>
       <Card className="space-y-3">
-        <label className="block"><span className="text-sm text-slate-500">Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="w-full border rounded-xl p-3 mt-1" /></label>
-        <label className="block"><span className="text-sm text-slate-500">Description</span>
-          <input value={desc} onChange={(e) => setDesc(e.target.value)} className="w-full border rounded-xl p-3 mt-1" /></label>
-        <label className="block"><span className="text-sm text-slate-500">Default price per piece (₹)</span>
-          <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} className="w-full border rounded-xl p-3 mt-1" /></label>
-        <label className="block"><span className="text-sm text-slate-500">Pieces in one box</span>
-          <input type="number" value={boxSize} onChange={(e) => setBoxSize(Number(e.target.value))} className="w-full border rounded-xl p-3 mt-1" /></label>
-        <label className="block"><span className="text-sm text-slate-500">Current stock (pieces)</span>
-          <input type="number" value={stock} onChange={(e) => setStock(Number(e.target.value))} className="w-full border rounded-xl p-3 mt-1" />
-          <div className="text-xs text-slate-400 mt-1">You can directly correct the stock number here.</div></label>
-        <label className="block"><span className="text-sm text-slate-500">Low stock warning at (pieces)</span>
-          <input type="number" value={low} onChange={(e) => setLow(Number(e.target.value))} className="w-full border rounded-xl p-3 mt-1" /></label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Description</span>
+          <input
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Default price per piece (₹)</span>
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Pieces in one box</span>
+          <input
+            type="number"
+            value={boxSize}
+            onChange={(e) => setBoxSize(e.target.value)}
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Current stock (pieces)</span>
+          <input
+            type="number"
+            value={stock}
+            onChange={(e) => setStock(e.target.value)}
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+          <div className="text-xs text-slate-400 mt-1">
+            You can directly correct the stock number here.
+          </div>
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Low stock warning at (pieces)</span>
+          <input
+            type="number"
+            value={low}
+            onChange={(e) => setLow(e.target.value)}
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
         {err && <div className="text-red-600 text-sm">{err}</div>}
-        <Btn onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Btn>
+        <Btn onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Save Changes'}
+        </Btn>
       </Card>
     </>
   );
@@ -287,8 +372,8 @@ function NewSaleScreen({
 }) {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [units, setUnits] = useState<Record<string, 'box' | 'piece'>>({});
-  const [qtys, setQtys] = useState<Record<string, number>>({});
-  const [prices, setPrices] = useState<Record<string, number | ''>>({});
+  const [qtys, setQtys] = useState<Record<string, number | string>>({});
+  const [prices, setPrices] = useState<Record<string, number | string>>({});
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
@@ -298,27 +383,40 @@ function NewSaleScreen({
   const toggle = (id: string) => {
     setSelected((s) => ({ ...s, [id]: !s[id] }));
     if (!units[id]) setUnits((u) => ({ ...u, [id]: 'box' }));
-    if (!qtys[id]) setQtys((q) => ({ ...q, [id]: 1 }));
+    if (qtys[id] === undefined) setQtys((q) => ({ ...q, [id]: 1 }));
   };
 
   const items = products
     .filter((p) => selected[p.id])
     .map((p) => {
       const unit = units[p.id] || 'box';
-      const qty = qtys[p.id] || 1;
+      const rawQty = qtys[p.id];
+      const qty = rawQty === '' || rawQty === undefined ? 1 : Number(rawQty);
       const pieces = unit === 'box' ? qty * p.boxSize : qty;
-      const price = prices[p.id] === '' || prices[p.id] === undefined ? p.defaultPricePerPiece : Number(prices[p.id]);
+      const rawPrice = prices[p.id];
+      const price =
+        rawPrice === '' || rawPrice === undefined
+          ? p.defaultPricePerPiece
+          : Number(rawPrice);
       return { productId: p.id, unit, quantity: qty, pieces, price, product: p };
     });
 
   const total = items.reduce((s, i) => s + i.pieces * i.price, 0);
 
   const save = async () => {
-    if (items.length === 0) { setErr('Select at least one product'); return; }
+    if (items.length === 0) {
+      setErr('Select at least one product');
+      return;
+    }
     for (const i of items) {
-      if (i.quantity <= 0) { setErr('Quantity must be greater than 0'); return; }
+      if (i.quantity <= 0) {
+        setErr('Quantity must be greater than 0');
+        return;
+      }
       if (i.pieces > i.product.currentStock) {
-        setErr(`Not enough stock for ${i.product.name}. Only ${i.product.currentStock} pieces available.`);
+        setErr(
+          `Not enough stock for ${i.product.name}. Only ${i.product.currentStock} pieces available.`
+        );
         return;
       }
     }
@@ -346,38 +444,118 @@ function NewSaleScreen({
 
   return (
     <>
-      <button onClick={onBack} className="text-teal-700 mb-2 font-medium">← Back</button>
+      <button onClick={onBack} className="text-teal-700 mb-2 font-medium">
+        ← Back
+      </button>
       <Title>New Sale</Title>
       <Card className="mb-3">
         <div className="font-semibold mb-2">Select products</div>
         <div className="space-y-2">
           {products.map((p) => {
             const isOn = !!selected[p.id];
+            const currentQty = qtys[p.id] !== undefined ? qtys[p.id] : 1;
+            const currentUnit = units[p.id] || 'box';
+            const numQty = currentQty === '' ? 1 : Number(currentQty);
+            const calculatedPieces = currentUnit === 'box' ? numQty * p.boxSize : numQty;
+            const rawPrice = prices[p.id];
+            const activePrice =
+              rawPrice === '' || rawPrice === undefined
+                ? p.defaultPricePerPiece
+                : Number(rawPrice);
+
             return (
-              <div key={p.id} className={`rounded-xl border p-3 ${isOn ? 'border-teal-600 bg-teal-50' : 'border-slate-200'}`}>
+              <div
+                key={p.id}
+                className={`rounded-xl border p-3 ${
+                  isOn ? 'border-teal-600 bg-teal-50' : 'border-slate-200'
+                }`}
+              >
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={isOn} onChange={() => toggle(p.id)} className="w-5 h-5 accent-teal-700" />
+                  <input
+                    type="checkbox"
+                    checked={isOn}
+                    onChange={() => toggle(p.id)}
+                    className="w-5 h-5 accent-teal-700"
+                  />
                   <img src={p.imageUrl} alt="" className="w-12 h-12 object-contain" />
                   <div className="flex-1">
                     <div className="font-semibold">{p.name}</div>
-                    <div className="text-sm text-slate-500">Stock: {p.currentStock} pcs · Default {inr(p.defaultPricePerPiece)}/pc</div>
+                    <div className="text-sm text-slate-500">
+                      Stock: {p.currentStock} pcs · Default {inr(p.defaultPricePerPiece)}/pc
+                    </div>
                   </div>
                 </label>
                 {isOn && (
                   <div className="mt-3 pt-3 border-t border-teal-100 space-y-3">
-                    <Toggle options={[['box', `Box (${p.boxSize} pcs)`], ['piece', 'Piece']]} value={units[p.id] || 'box'} onChange={(v) => setUnits((u) => ({ ...u, [p.id]: v as 'box' | 'piece' }))} />
+                    <Toggle
+                      options={[
+                        ['box', `Box (${p.boxSize} pcs)`],
+                        ['piece', 'Piece'],
+                      ]}
+                      value={currentUnit}
+                      onChange={(v) =>
+                        setUnits((u) => ({ ...u, [p.id]: v as 'box' | 'piece' }))
+                      }
+                    />
                     <div className="flex items-center justify-center gap-4">
-                      <button type="button" className="w-10 h-10 rounded-full bg-white border text-xl" onClick={() => setQtys((q) => ({ ...q, [p.id]: Math.max(1, (q[p.id] || 1) - 1) }))}>−</button>
-                      <input type="number" min={1} value={qtys[p.id] || 1} onChange={(e) => setQtys((q) => ({ ...q, [p.id]: Number(e.target.value) }))} className="w-20 text-center text-2xl font-bold border rounded-xl py-1" />
-                      <button type="button" className="w-10 h-10 rounded-full bg-white border text-xl" onClick={() => setQtys((q) => ({ ...q, [p.id]: (q[p.id] || 1) + 1 }))}>+</button>
+                      <button
+                        type="button"
+                        className="w-10 h-10 rounded-full bg-white border text-xl"
+                        onClick={() =>
+                          setQtys((q) => ({
+                            ...q,
+                            [p.id]: Math.max(1, (Number(q[p.id]) || 1) - 1),
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={currentQty}
+                        onChange={(e) =>
+                          setQtys((q) => ({
+                            ...q,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        onBlur={() => {
+                          if (currentQty === '' || Number(currentQty) < 1) {
+                            setQtys((q) => ({ ...q, [p.id]: 1 }));
+                          }
+                        }}
+                        className="w-20 text-center text-2xl font-bold border rounded-xl py-1 bg-white"
+                      />
+                      <button
+                        type="button"
+                        className="w-10 h-10 rounded-full bg-white border text-xl"
+                        onClick={() =>
+                          setQtys((q) => ({
+                            ...q,
+                            [p.id]: (Number(q[p.id]) || 0) + 1,
+                          }))
+                        }
+                      >
+                        +
+                      </button>
                     </div>
                     <label className="block">
-                      <span className="text-sm text-slate-500">Price per piece (₹) — leave default or change</span>
-                      <input type="number" value={prices[p.id] === undefined ? p.defaultPricePerPiece : prices[p.id]} onChange={(e) => setPrices((pr) => ({ ...pr, [p.id]: e.target.value === '' ? '' : Number(e.target.value) }))} className="w-full border rounded-xl p-2.5 mt-1" />
+                      <span className="text-sm text-slate-500">
+                        Price per piece (₹) — leave default or change
+                      </span>
+                      <input
+                        type="number"
+                        value={rawPrice !== undefined ? rawPrice : p.defaultPricePerPiece}
+                        onChange={(e) =>
+                          setPrices((pr) => ({ ...pr, [p.id]: e.target.value }))
+                        }
+                        className="w-full border rounded-xl p-2.5 mt-1 bg-white"
+                      />
                     </label>
                     <div className="text-sm text-center text-slate-600">
-                      = <b>{(units[p.id] || 'box') === 'box' ? (qtys[p.id] || 1) * p.boxSize : qtys[p.id] || 1} pieces</b> · Line total{' '}
-                      <b className="text-teal-700">{inr(((units[p.id] || 'box') === 'box' ? (qtys[p.id] || 1) * p.boxSize : qtys[p.id] || 1) * (prices[p.id] === '' || prices[p.id] === undefined ? p.defaultPricePerPiece : Number(prices[p.id])))}</b>
+                      = <b>{calculatedPieces} pieces</b> · Line total{' '}
+                      <b className="text-teal-700">{inr(calculatedPieces * activePrice)}</b>
                     </div>
                   </div>
                 )}
@@ -388,22 +566,56 @@ function NewSaleScreen({
       </Card>
       <Card className="space-y-3 mb-3">
         <div className="font-semibold">Customer details</div>
-        <label className="block"><span className="text-sm text-slate-500">Customer name</span>
-          <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Walk-in" className="w-full border rounded-xl p-3 mt-1" /></label>
-        <label className="block"><span className="text-sm text-slate-500">Phone number (optional)</span>
-          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. 9876543210" className="w-full border rounded-xl p-3 mt-1" /></label>
-        <label className="block"><span className="text-sm text-slate-500">Notes / description (optional)</span>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any extra detail about this sale" rows={2} className="w-full border rounded-xl p-3 mt-1 resize-none" /></label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Customer name</span>
+          <input
+            value={customer}
+            onChange={(e) => setCustomer(e.target.value)}
+            placeholder="Walk-in"
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Phone number (optional)</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="e.g. 9876543210"
+            className="w-full border rounded-xl p-3 mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm text-slate-500">Notes / description (optional)</span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Any extra detail about this sale"
+            rows={2}
+            className="w-full border rounded-xl p-3 mt-1 resize-none"
+          />
+        </label>
       </Card>
       {items.length > 0 && (
         <Card className="mb-3 bg-teal-50 border-teal-100">
           <div className="text-sm text-teal-800">Bill total</div>
           <div className="text-3xl font-bold text-teal-800">{inr(total)}</div>
-          <div className="text-sm text-teal-700 mt-1">{items.length} product{items.length > 1 ? 's' : ''} · {items.reduce((s, i) => s + i.pieces, 0)} pieces</div>
+          <div className="text-sm text-teal-700 mt-1">
+            {items.length} product{items.length > 1 ? 's' : ''} ·{' '}
+            {items.reduce((s, i) => s + i.pieces, 0)} pieces
+          </div>
         </Card>
       )}
-      {err && <div className="mb-3 text-red-600 font-medium text-sm bg-red-50 p-3 rounded-xl">{err}</div>}
-      <div className="mb-24"><Btn onClick={save} disabled={saving || items.length === 0}>{saving ? 'Saving…' : 'Save Sale'}</Btn></div>
+      {err && (
+        <div className="mb-3 text-red-600 font-medium text-sm bg-red-50 p-3 rounded-xl">
+          {err}
+        </div>
+      )}
+      <div className="mb-24">
+        <Btn onClick={save} disabled={saving || items.length === 0}>
+          {saving ? 'Saving…' : 'Save Sale'}
+        </Btn>
+      </div>
     </>
   );
 }
@@ -414,15 +626,21 @@ export default function App() {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [stockLogs, setStockLogs] = useState<StockLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
       setError('');
-      const [s, list] = await Promise.all([api.getStats(), api.getSales(80)]);
+      const [s, list, logs] = await Promise.all([
+        api.getStats(),
+        api.getSales(80),
+        api.getStockLog(30),
+      ]);
       setStats(s);
       setSales(list);
+      setStockLogs(logs);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Cannot connect to server. Check internet & API settings.');
     } finally {
@@ -483,16 +701,35 @@ export default function App() {
     <div className="max-w-lg mx-auto p-4 pb-28 min-h-screen">
       {page === 'home' && stats && (
         <>
-          <Title>Good day</Title>
+          <div className="mb-4">
+            <h1 className="text-2xl font-bold text-slate-800">Inventory Manager</h1>
+            <p className="text-sm text-slate-500">Good day</p>
+          </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <Card>
-              <div className="text-slate-500 text-sm">Total Stock</div>
-              <div className="text-2xl font-bold mt-0.5">{products.reduce((s, p) => s + p.currentStock, 0)}<span className="text-base font-normal text-slate-500"> pcs</span></div>
+            <Card className="flex flex-col justify-between">
+              <div>
+                <div className="text-slate-500 text-sm">Total Stock</div>
+                <div className="text-2xl font-bold mt-0.5">{products.reduce((s, p) => s + p.currentStock, 0)}<span className="text-base font-normal text-slate-500"> pcs</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 mt-2 pt-2 border-t border-slate-100">
+                {products.map((p) => (
+                  <div key={p.id} className="bg-slate-50 rounded-lg p-1.5 text-center border border-slate-100">
+                    <div className="text-[11px] text-slate-500 font-medium truncate">
+                      {p.id === 'detergent' ? 'Detergent' : p.id === 'descal' ? 'Descal' : p.name}
+                    </div>
+                    <div className="text-sm font-bold text-slate-800">
+                      {p.currentStock} <span className="text-[10px] font-normal text-slate-500">pcs</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </Card>
-            <Card>
-              <div className="text-slate-500 text-sm">Sales this month</div>
-              <div className="text-2xl font-bold mt-0.5 text-teal-700">{inr(stats.month.revenue)}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{stats.month.saleCount} bills · {stats.month.pieces} pcs</div>
+            <Card className="flex flex-col justify-between">
+              <div>
+                <div className="text-slate-500 text-sm">Sales this month</div>
+                <div className="text-2xl font-bold mt-0.5 text-teal-700">{inr(stats.month.revenue)}</div>
+              </div>
+              <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100">{stats.month.saleCount} bills · {stats.month.pieces} pcs</div>
             </Card>
           </div>
           <div className="space-y-3 mb-3">
@@ -543,7 +780,7 @@ export default function App() {
       {page === 'inventory' && (
         <>
           <Title>Inventory</Title>
-          <div className="space-y-3">
+          <div className="space-y-3 mb-4">
             {products.map((p) => {
               const st = stockStatus(p);
               return (
@@ -562,6 +799,58 @@ export default function App() {
               );
             })}
           </div>
+
+          <Card className="mb-20">
+            <div className="font-semibold text-slate-800 mb-2">Stock Activity Log</div>
+            {stockLogs.length === 0 && (
+              <div className="text-sm text-slate-500 py-2">No stock updates yet.</div>
+            )}
+            <div className="divide-y divide-slate-100">
+              {stockLogs.map((log) => {
+                const prod = getP(log.productId);
+                const prodName = prod ? prod.name : log.productId;
+                return (
+                  <div key={log._id} className="py-2.5 flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-sm text-slate-800">{prodName}</div>
+                      <div className="text-xs text-slate-400">
+                        {day(log.at)} · {time(log.at)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {log.type === 'add' && (
+                        <div>
+                          <span className="inline-block text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            +{log.pieces} pcs added
+                          </span>
+                          {log.unit === 'box' && (
+                            <div className="text-[11px] text-slate-400">
+                              {log.quantity} {log.quantity > 1 ? 'boxes' : 'box'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {log.type === 'sale' && (
+                        <span className="inline-block text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                          {log.pieces} pcs sold
+                        </span>
+                      )}
+                      {log.type === 'manual_edit' && (
+                        <div>
+                          <span className="inline-block text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                            {log.pieces > 0 ? `+${log.pieces}` : log.pieces} pcs adjusted
+                          </span>
+                          <div className="text-[11px] text-slate-400">
+                            {log.oldStock} → {log.newStock} pcs
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
         </>
       )}
 
