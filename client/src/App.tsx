@@ -77,9 +77,8 @@ function Card({
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-4 ${className} ${
-        onClick ? 'cursor-pointer active:scale-[0.98] transition' : ''
-      }`}
+      className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-4 ${className} ${onClick ? 'cursor-pointer active:scale-[0.98] transition' : ''
+        }`}
     >
       {children}
     </div>
@@ -108,9 +107,8 @@ function Btn({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`w-full min-h-12 rounded-xl font-semibold text-base active:scale-95 transition disabled:opacity-50 ${
-        secondary ? 'bg-slate-100 text-slate-700' : 'bg-teal-700 text-white'
-      }`}
+      className={`w-full min-h-12 rounded-xl font-semibold text-base active:scale-95 transition disabled:opacity-50 ${secondary ? 'bg-slate-100 text-slate-700' : 'bg-teal-700 text-white'
+        }`}
     >
       {children}
     </button>
@@ -133,11 +131,10 @@ function Toggle({
           key={k}
           type="button"
           onClick={() => onChange(k)}
-          className={`min-h-12 rounded-xl font-semibold border text-sm ${
-            value === k
+          className={`min-h-12 rounded-xl font-semibold border text-sm ${value === k
               ? 'bg-teal-700 text-white border-teal-700'
               : 'bg-white text-slate-600 border-slate-200'
-          }`}
+            }`}
         >
           {label}
         </button>
@@ -466,9 +463,8 @@ function NewSaleScreen({
             return (
               <div
                 key={p.id}
-                className={`rounded-xl border p-3 ${
-                  isOn ? 'border-teal-600 bg-teal-50' : 'border-slate-200'
-                }`}
+                className={`rounded-xl border p-3 ${isOn ? 'border-teal-600 bg-teal-50' : 'border-slate-200'
+                  }`}
               >
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -494,22 +490,20 @@ function NewSaleScreen({
                           <button
                             type="button"
                             onClick={() => setUnits((u) => ({ ...u, [p.id]: 'box' }))}
-                            className={`flex-1 rounded-md text-xs font-semibold transition ${
-                              currentUnit === 'box'
+                            className={`flex-1 rounded-md text-xs font-semibold transition ${currentUnit === 'box'
                                 ? 'bg-teal-700 text-white shadow-sm'
                                 : 'text-slate-600 hover:bg-slate-50'
-                            }`}
+                              }`}
                           >
                             Box ({p.boxSize})
                           </button>
                           <button
                             type="button"
                             onClick={() => setUnits((u) => ({ ...u, [p.id]: 'piece' }))}
-                            className={`flex-1 rounded-md text-xs font-semibold transition ${
-                              currentUnit === 'piece'
+                            className={`flex-1 rounded-md text-xs font-semibold transition ${currentUnit === 'piece'
                                 ? 'bg-teal-700 text-white shadow-sm'
                                 : 'text-slate-600 hover:bg-slate-50'
-                            }`}
+                              }`}
                           >
                             Piece
                           </button>
@@ -660,6 +654,516 @@ function NewSaleScreen({
   );
 }
 
+function AnalyticsScreen({
+  sales,
+  products,
+  stats,
+}: {
+  sales: Sale[];
+  products: Product[];
+  stats: Stats | null;
+}) {
+  const [scale, setScale] = useState<'month' | 'week' | 'all'>('month');
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const sevenDaysAgo = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 6
+  ).setHours(0, 0, 0, 0);
+
+  const filteredSales = sales.filter((s) => {
+    if (scale === 'month') return s.soldAt >= startOfMonth;
+    if (scale === 'week') return s.soldAt >= sevenDaysAgo;
+    return true;
+  });
+
+  const totalRevenue = filteredSales.reduce((acc, s) => acc + s.totalAmount, 0);
+  const totalBills = filteredSales.length;
+  const avgBill = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
+  const totalPieces = filteredSales.reduce(
+    (acc, s) => acc + s.items.reduce((sum, it) => sum + it.pieces, 0),
+    0
+  );
+
+  type Bucket = {
+    key: string;
+    label: string;
+    shortLabel: string;
+    sublabel: string;
+    revenue: number;
+    count: number;
+    pieces: number;
+  };
+
+  let buckets: Bucket[] = [];
+
+  if (scale === 'week') {
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dateStr = d.toDateString();
+      const daySales = filteredSales.filter(
+        (s) => new Date(s.soldAt).toDateString() === dateStr
+      );
+      const rev = daySales.reduce((acc, s) => acc + s.totalAmount, 0);
+      const pcs = daySales.reduce(
+        (acc, s) => acc + s.items.reduce((pAcc, it) => pAcc + it.pieces, 0),
+        0
+      );
+      buckets.push({
+        key: dateStr,
+        label: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        shortLabel: i === 0 ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short' }),
+        sublabel: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+        revenue: rev,
+        count: daySales.length,
+        pieces: pcs,
+      });
+    }
+  } else if (scale === 'month') {
+    const totalDaysToShow = Math.max(7, now.getDate());
+    const startDay = Math.max(1, now.getDate() - 6);
+    const endDay = Math.max(startDay + 6, now.getDate());
+
+    for (let d = startDay; d <= endDay; d++) {
+      const dt = new Date(now.getFullYear(), now.getMonth(), d);
+      const dateStr = dt.toDateString();
+      const daySales = filteredSales.filter(
+        (s) => new Date(s.soldAt).toDateString() === dateStr
+      );
+      const rev = daySales.reduce((acc, s) => acc + s.totalAmount, 0);
+      const pcs = daySales.reduce(
+        (acc, s) => acc + s.items.reduce((pAcc, it) => pAcc + it.pieces, 0),
+        0
+      );
+      buckets.push({
+        key: dateStr,
+        label: dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        shortLabel: `${d} ${dt.toLocaleDateString('en-IN', { month: 'short' })}`,
+        sublabel: dt.toLocaleDateString('en-IN', { weekday: 'short' }),
+        revenue: rev,
+        count: daySales.length,
+        pieces: pcs,
+      });
+    }
+  } else {
+    const monthMap = new Map<
+      string,
+      { label: string; shortLabel: string; sublabel: string; rev: number; count: number; pcs: number; ts: number }
+    >();
+
+    for (let m = 5; m >= 0; m--) {
+      const dt = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      const key = `${dt.getFullYear()}-${dt.getMonth()}`;
+      monthMap.set(key, {
+        label: dt.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+        shortLabel: dt.toLocaleDateString('en-IN', { month: 'short' }),
+        sublabel: String(dt.getFullYear()),
+        rev: 0,
+        count: 0,
+        pcs: 0,
+        ts: dt.getTime(),
+      });
+    }
+
+    for (const s of filteredSales) {
+      const dt = new Date(s.soldAt);
+      const key = `${dt.getFullYear()}-${dt.getMonth()}`;
+      if (!monthMap.has(key)) {
+        monthMap.set(key, {
+          label: dt.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+          shortLabel: dt.toLocaleDateString('en-IN', { month: 'short' }),
+          sublabel: String(dt.getFullYear()),
+          rev: 0,
+          count: 0,
+          pcs: 0,
+          ts: new Date(dt.getFullYear(), dt.getMonth(), 1).getTime(),
+        });
+      }
+      const entry = monthMap.get(key)!;
+      entry.rev += s.totalAmount;
+      entry.count += 1;
+      entry.pcs += s.items.reduce((acc, it) => acc + it.pieces, 0);
+    }
+
+    const sorted = Array.from(monthMap.values()).sort((a, b) => a.ts - b.ts);
+    buckets = sorted.map((m) => ({
+      key: `${m.ts}`,
+      label: m.label,
+      shortLabel: m.shortLabel,
+      sublabel: m.sublabel,
+      revenue: m.rev,
+      count: m.count,
+      pieces: m.pcs,
+    }));
+  }
+
+  const rawMax = Math.max(...buckets.map((b) => b.revenue), 0);
+  const niceScale = (() => {
+    const safeMax = Math.max(rawMax, 1000);
+    const magnitude = Math.pow(10, Math.floor(Math.log10(safeMax)));
+    const factor = safeMax / magnitude;
+    let niceFactor = 10;
+    if (factor <= 1) niceFactor = 1;
+    else if (factor <= 1.5) niceFactor = 1.5;
+    else if (factor <= 2) niceFactor = 2;
+    else if (factor <= 3) niceFactor = 3;
+    else if (factor <= 4) niceFactor = 4;
+    else if (factor <= 5) niceFactor = 5;
+    else if (factor <= 6) niceFactor = 6;
+    else if (factor <= 8) niceFactor = 8;
+    const niceMax = niceFactor * magnitude;
+    const steps = [
+      niceMax,
+      niceMax * 0.75,
+      niceMax * 0.5,
+      niceMax * 0.25,
+      0,
+    ];
+    return { max: niceMax, steps };
+  })();
+
+  const svgW = 500;
+  const svgH = 200;
+  const padL = 56;
+  const padR = 20;
+  const padT = 20;
+  const padB = 35;
+  const chartW = svgW - padL - padR;
+  const chartH = svgH - padT - padB;
+  const baseY = padT + chartH;
+
+  const points = buckets.map((b, i) => {
+    const x = padL + (i / Math.max(1, buckets.length - 1)) * chartW;
+    const y = baseY - (b.revenue / niceScale.max) * chartH;
+    return { x, y, bucket: b, index: i };
+  });
+
+  const pathStrings = (() => {
+    if (points.length === 0) return { line: '', area: '' };
+    if (points.length === 1) {
+      const pt = points[0];
+      return {
+        line: `M ${pt.x - 20} ${pt.y} L ${pt.x + 20} ${pt.y}`,
+        area: `M ${pt.x - 20} ${baseY} L ${pt.x - 20} ${pt.y} L ${pt.x + 20} ${pt.y} L ${pt.x + 20} ${baseY} Z`,
+      };
+    }
+    let line = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i === 0 ? 0 : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2] || p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      line += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    const last = points[points.length - 1];
+    const first = points[0];
+    const area = `${line} L ${last.x.toFixed(1)} ${baseY} L ${first.x.toFixed(1)} ${baseY} Z`;
+    return { line, area };
+  })();
+
+  const activeIndex =
+    selectedIndex !== null
+      ? selectedIndex
+      : points.slice().reverse().find((p) => p.bucket.revenue > 0)?.index ?? (points.length - 1);
+
+  const activePoint = points[activeIndex];
+
+  const productStats = products.map((p) => {
+    let pieces = 0;
+    let revenue = 0;
+    for (const s of filteredSales) {
+      for (const it of s.items) {
+        if (it.productId === p.id) {
+          pieces += it.pieces;
+          revenue += it.lineTotal;
+        }
+      }
+    }
+    const pct = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0;
+    return { product: p, pieces, revenue, pct };
+  });
+
+  return (
+    <>
+      <Title>Sales Analytics</Title>
+
+      <div className="flex rounded-xl border border-slate-200 bg-white p-1 mb-3 shadow-sm">
+        {(
+          [
+            ['month', 'This Month'],
+            ['week', 'Last 7 Days'],
+            ['all', 'All Time'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => {
+              setScale(k);
+              setSelectedIndex(null);
+            }}
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
+              scale === k
+                ? 'bg-teal-700 text-white shadow'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 mb-3">
+        <Card className="bg-teal-50/70 border-teal-100">
+          <div className="text-xs text-teal-800 font-medium">Revenue</div>
+          <div className="text-2xl font-bold text-teal-900 mt-0.5">
+            {inr(totalRevenue)}
+          </div>
+          <div className="text-[11px] text-teal-700 mt-1">
+            {totalBills} sale{totalBills === 1 ? '' : 's'} recorded
+          </div>
+        </Card>
+
+        <Card className="bg-slate-50 border-slate-200">
+          <div className="text-xs text-slate-500 font-medium">Avg Bill / Sale</div>
+          <div className="text-2xl font-bold text-slate-800 mt-0.5">
+            {inr(avgBill)}
+          </div>
+          <div className="text-[11px] text-slate-500 mt-1">
+            {totalPieces} total pieces sold
+          </div>
+        </Card>
+      </div>
+
+      <Card className="mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="font-semibold text-slate-800">Revenue Trend</div>
+            <div className="text-xs text-slate-500">
+              {scale === 'week'
+                ? 'Daily performance (Last 7 days)'
+                : scale === 'month'
+                ? 'Daily performance this month'
+                : 'Monthly performance overview'}
+            </div>
+          </div>
+          {rawMax > 0 && (
+            <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded-md border border-teal-100">
+              Peak: {inr(rawMax)}
+            </span>
+          )}
+        </div>
+
+        <div className="w-full overflow-hidden select-none">
+          <svg
+            viewBox={`0 0 ${svgW} ${svgH}`}
+            className="w-full h-auto overflow-visible"
+            style={{ maxHeight: '230px' }}
+          >
+            <defs>
+              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#0f766e" stopOpacity="0.32" />
+                <stop offset="100%" stopColor="#0f766e" stopOpacity="0.01" />
+              </linearGradient>
+            </defs>
+
+            {niceScale.steps.map((val, idx) => {
+              const y = padT + (idx / 4) * chartH;
+              return (
+                <g key={idx}>
+                  <line
+                    x1={padL}
+                    y1={y}
+                    x2={svgW - padR}
+                    y2={y}
+                    stroke="#e2e8f0"
+                    strokeDasharray={idx === 4 ? '' : '3 3'}
+                    strokeWidth={idx === 4 ? '1.5' : '1'}
+                  />
+                  <text
+                    x={padL - 8}
+                    y={y + 3.5}
+                    textAnchor="end"
+                    fontSize="10"
+                    fill="#64748b"
+                    fontWeight="500"
+                  >
+                    {val >= 1000 ? `₹${val / 1000}k` : `₹${val}`}
+                  </text>
+                </g>
+              );
+            })}
+
+            {pathStrings.area && (
+              <path d={pathStrings.area} fill="url(#chartGradient)" />
+            )}
+
+            {pathStrings.line && (
+              <path
+                d={pathStrings.line}
+                fill="none"
+                stroke="#0f766e"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+
+            {activePoint && (
+              <line
+                x1={activePoint.x}
+                y1={padT}
+                x2={activePoint.x}
+                y2={baseY}
+                stroke="#0f766e"
+                strokeDasharray="2 2"
+                strokeWidth="1.5"
+                opacity="0.6"
+              />
+            )}
+
+            {points.map((pt) => {
+              const isSelected = activeIndex === pt.index;
+              return (
+                <g
+                  key={pt.index}
+                  className="cursor-pointer"
+                  onClick={() => setSelectedIndex(pt.index)}
+                >
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isSelected ? 10 : 8}
+                    fill="transparent"
+                  />
+                  {isSelected && (
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="7"
+                      fill="#0f766e"
+                      fillOpacity="0.25"
+                    />
+                  )}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isSelected ? 4.5 : 3.5}
+                    fill={pt.bucket.revenue > 0 ? '#0f766e' : '#94a3b8'}
+                    stroke="#ffffff"
+                    strokeWidth="2"
+                    className="transition-all"
+                  />
+                  <text
+                    x={pt.x}
+                    y={svgH - 12}
+                    textAnchor="middle"
+                    fontSize="9.5"
+                    fill={isSelected ? '#0f766e' : '#64748b'}
+                    fontWeight={isSelected ? '700' : '500'}
+                  >
+                    {pt.bucket.shortLabel}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {activePoint && (
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs bg-slate-50/90 rounded-xl p-2.5">
+            <div>
+              <div className="font-bold text-slate-800">
+                {activePoint.bucket.label}
+              </div>
+              <div className="text-slate-500 text-[11px]">
+                {activePoint.bucket.count} bill{activePoint.bucket.count === 1 ? '' : 's'} · {activePoint.bucket.pieces} pcs sold
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-bold text-teal-800">
+                {inr(activePoint.bucket.revenue)}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card className="mb-3">
+        <div className="font-semibold mb-1">Product Breakdown</div>
+        <div className="text-xs text-slate-500 mb-3">
+          Sales volume & revenue share for the selected period
+        </div>
+
+        <div className="space-y-3">
+          {productStats.map(({ product: p, pieces, revenue, pct }) => (
+            <div key={p.id} className="p-2.5 border border-slate-200 rounded-xl bg-white">
+              <div className="flex items-center gap-2.5 mb-2">
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  className="w-10 h-10 object-contain rounded-md"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate">{p.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {pieces} pcs sold · Default {inr(p.defaultPricePerPiece)}/pc
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-sm text-teal-800">{inr(revenue)}</div>
+                  <div className="text-[11px] font-semibold text-teal-600">{pct}% share</div>
+                </div>
+              </div>
+
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-teal-600 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="mb-24">
+        <button
+          type="button"
+          onClick={() => setShowSettings((s) => !s)}
+          className="w-full flex items-center justify-between text-left font-medium text-slate-600 text-sm"
+        >
+          <span>ℹ️ App & Database Settings</span>
+          <span className="text-slate-400 text-xs">{showSettings ? '▲ Hide' : '▼ Show'}</span>
+        </button>
+
+        {showSettings && (
+          <div className="mt-3 pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+            <div>
+              <b>Database:</b> Stored in MongoDB Atlas. Keep API key secure.
+            </div>
+            <div>
+              <b>Calculation:</b> Stock is tracked in pieces. 1 Box = {products[0]?.boxSize || 10} pieces.
+            </div>
+            <div>
+              <b>Current Stock in Inventory:</b>{' '}
+              {products.map((p) => `${p.name}: ${p.currentStock} pcs`).join(' · ')}
+            </div>
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
 export default function App() {
   const [page, setPage] = useState<Page>('home');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -675,7 +1179,7 @@ export default function App() {
       setError('');
       const [s, list, logs] = await Promise.all([
         api.getStats(),
-        api.getSales(80),
+        api.getSales(150),
         api.getStockLog(30),
       ]);
       setStats(s);
@@ -993,50 +1497,11 @@ export default function App() {
       )}
 
       {page === 'more' && (
-        <>
-          <Title>Settings & Info</Title>
-          <Card className="mb-3">
-            <div className="font-semibold mb-1">About this app</div>
-            <p className="text-sm text-slate-600 leading-relaxed">Simple stock and sales tracker for two IFB products. All data is stored safely in the cloud (MongoDB Atlas). Works best on mobile.</p>
-          </Card>
-          <Card className="mb-3">
-            <div className="font-semibold mb-2">How calculations work</div>
-            <ul className="text-sm text-slate-600 space-y-2 list-disc pl-4">
-              <li><b>Stock</b> is always counted in <b>pieces</b>.</li>
-              <li>1 Box = fixed number of pieces (shown on each product). You can change it in Edit Product.</li>
-              <li>When you sell by box, the system multiplies quantity × box size to get pieces and reduces stock accordingly.</li>
-              <li>Sale total = pieces × price per piece (for each product, then added).</li>
-              <li>You can edit stock number directly if a physical count is different.</li>
-            </ul>
-          </Card>
-          <Card className="mb-3">
-            <div className="font-semibold mb-2">This month summary</div>
-            {stats && (
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-500">Total bills</span><span className="font-semibold">{stats.month.saleCount}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Pieces sold</span><span className="font-semibold">{stats.month.pieces}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Revenue</span><span className="font-semibold text-teal-700">{inr(stats.month.revenue)}</span></div>
-                {products.map((p) => {
-                  const m = stats.month.byProduct[p.id] || { pieces: 0, revenue: 0 };
-                  return (
-                    <div key={p.id} className="pt-2 border-t flex justify-between">
-                      <span className="text-slate-600">{p.name}</span>
-                      <span>{m.pieces} pcs · {inr(m.revenue)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-          <Card>
-            <div className="font-semibold mb-1">Data</div>
-            <p className="text-sm text-slate-600">All sales and stock live in your MongoDB Atlas database. Keep your API key private. To change database connection, update the server <code>.env</code> file.</p>
-          </Card>
-        </>
+        <AnalyticsScreen sales={sales} products={products} stats={stats} />
       )}
 
       <nav className="fixed bottom-0 inset-x-0 bg-white border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)] max-w-lg mx-auto">
-        {([['home', '🏠', 'Home'], ['inventory', '📦', 'Stock'], ['sales', '🧾', 'Sales'], ['more', 'ℹ️', 'Info']] as const).map(([k, icon, label]) => (
+        {([['home', '🏠', 'Home'], ['inventory', '📦', 'Stock'], ['sales', '🧾', 'Sales'], ['more', '📊', 'Analytics']] as const).map(([k, icon, label]) => (
           <button key={k} type="button" onClick={() => go(k)} className={`py-3 text-sm ${tab === k ? 'text-teal-700 font-bold' : 'text-slate-500'}`}>
             <div className="text-xl">{icon}</div>{label}
           </button>
