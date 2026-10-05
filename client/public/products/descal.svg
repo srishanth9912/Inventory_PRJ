@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
-  <rect width="120" height="120" rx="16" fill="#f1f5f9"/>
-  <rect x="32" y="28" width="56" height="64" rx="6" fill="#f97316"/>
-  <rect x="40" y="36" width="40" height="28" rx="3" fill="#ffedd5"/>
-  <circle cx="60" cy="70" r="10" fill="#fed7aa"/>
-  <text x="60" y="105" text-anchor="middle" font-size="11" font-family="system-ui" fill="#64748b">Descal</text>
-</svg>
