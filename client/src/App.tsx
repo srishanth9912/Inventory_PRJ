@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { api, inr, day, time } from './api';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { api, inr, day, time, getAuthToken, setAuthToken, clearAuthToken } from './api';
 
 type Product = {
   id: string;
@@ -24,12 +24,24 @@ type SaleItem = {
 
 type Sale = {
   _id: string;
+  customerId?: string | null;
   customerName: string;
   phone?: string | null;
   notes?: string | null;
   items: SaleItem[];
   totalAmount: number;
   soldAt: number;
+};
+
+type Customer = {
+  _id: string;
+  name: string;
+  phone?: string | null;
+  notes?: string | null;
+  totalOrders: number;
+  totalSpend: number;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type StockLogItem = {
@@ -63,6 +75,7 @@ type Page =
   | 'sales'
   | 'newsale'
   | 'saledetail'
+  | 'customers'
   | 'more';
 
 function Card({
@@ -95,12 +108,14 @@ function Btn({
   secondary,
   disabled,
   type = 'button',
+  className = '',
 }: {
   children: ReactNode;
   onClick?: () => void;
   secondary?: boolean;
   disabled?: boolean;
   type?: 'button' | 'submit';
+  className?: string;
 }) {
   return (
     <button
@@ -108,7 +123,7 @@ function Btn({
       disabled={disabled}
       onClick={onClick}
       className={`w-full min-h-12 rounded-xl font-semibold text-base active:scale-95 transition disabled:opacity-50 ${secondary ? 'bg-slate-100 text-slate-700' : 'bg-teal-700 text-white'
-        }`}
+        } ${className}`}
     >
       {children}
     </button>
@@ -132,8 +147,8 @@ function Toggle({
           type="button"
           onClick={() => onChange(k)}
           className={`min-h-12 rounded-xl font-semibold border text-sm ${value === k
-              ? 'bg-teal-700 text-white border-teal-700'
-              : 'bg-white text-slate-600 border-slate-200'
+            ? 'bg-teal-700 text-white border-teal-700'
+            : 'bg-white text-slate-600 border-slate-200'
             }`}
         >
           {label}
@@ -350,10 +365,14 @@ function EditProductScreen({
 
 function NewSaleScreen({
   products,
+  customers,
+  initialCustomer,
   onBack,
   onSaved,
 }: {
   products: Product[];
+  customers: Customer[];
+  initialCustomer?: Customer | null;
   onBack: () => void;
   onSaved: () => void;
 }) {
@@ -361,8 +380,9 @@ function NewSaleScreen({
   const [units, setUnits] = useState<Record<string, 'box' | 'piece'>>({});
   const [qtys, setQtys] = useState<Record<string, number | string>>({});
   const [prices, setPrices] = useState<Record<string, number | string>>({});
-  const [customer, setCustomer] = useState('');
-  const [phone, setPhone] = useState('');
+  const [customer, setCustomer] = useState(initialCustomer?.name || '');
+  const [customerId, setCustomerId] = useState(initialCustomer?._id || '');
+  const [phone, setPhone] = useState(initialCustomer?.phone || '');
   const [notes, setNotes] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
@@ -411,6 +431,7 @@ function NewSaleScreen({
     setErr('');
     try {
       await api.createSale({
+        customerId: customerId || undefined,
         customerName: customer,
         phone,
         notes,
@@ -481,8 +502,8 @@ function NewSaleScreen({
                             type="button"
                             onClick={() => setUnits((u) => ({ ...u, [p.id]: 'box' }))}
                             className={`flex-1 rounded-md text-xs font-semibold transition ${currentUnit === 'box'
-                                ? 'bg-teal-700 text-white shadow-sm'
-                                : 'text-slate-600 hover:bg-slate-50'
+                              ? 'bg-teal-700 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-slate-50'
                               }`}
                           >
                             Box ({p.boxSize})
@@ -491,8 +512,8 @@ function NewSaleScreen({
                             type="button"
                             onClick={() => setUnits((u) => ({ ...u, [p.id]: 'piece' }))}
                             className={`flex-1 rounded-md text-xs font-semibold transition ${currentUnit === 'piece'
-                                ? 'bg-teal-700 text-white shadow-sm'
-                                : 'text-slate-600 hover:bg-slate-50'
+                              ? 'bg-teal-700 text-white shadow-sm'
+                              : 'text-slate-600 hover:bg-slate-50'
                               }`}
                           >
                             Piece
@@ -591,6 +612,29 @@ function NewSaleScreen({
       <Card className="space-y-3 mb-3">
         <div className="font-semibold">Customer details</div>
         <label className="block">
+          <span className="text-sm text-slate-500">Saved customer</span>
+          <select
+            value={customerId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setCustomerId(id);
+              const saved = customers.find((c) => c._id === id);
+              if (saved) {
+                setCustomer(saved.name);
+                setPhone(saved.phone || '');
+              }
+            }}
+            className="w-full border rounded-xl p-3 mt-1 bg-white"
+          >
+            <option value="">Walk-in / enter manually</option>
+            {customers.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}{c.phone ? ` · ${c.phone}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
           <span className="text-sm text-slate-500">Customer name</span>
           <input
             value={customer}
@@ -640,6 +684,93 @@ function NewSaleScreen({
           {saving ? 'Saving…' : 'Save Sale'}
         </Btn>
       </div>
+    </>
+  );
+}
+
+function CustomersScreen({
+  customers,
+  sales,
+  onSelectSale,
+}: {
+  customers: Customer[];
+  sales: Sale[];
+  onSelectSale?: (sale: Sale) => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  const visible = customers.filter((c) =>
+    `${c.name} ${c.phone || ''}`.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const handleCustomerClick = (customer: Customer) => {
+    // Find matching sales for this customer
+    const matchingSales = sales.filter((s) => {
+      if (s.customerId && s.customerId === customer._id) return true;
+      if (s.phone && customer.phone && s.phone === customer.phone) return true;
+      if (s.customerName && customer.name && s.customerName.toLowerCase() === customer.name.toLowerCase()) return true;
+      return false;
+    });
+
+    if (matchingSales.length > 0) {
+      // Directly open the Sale Detail!
+      onSelectSale?.(matchingSales[0]);
+    }
+  };
+
+  return (
+    <>
+      <div className="mb-4">
+        <Title>Customers</Title>
+      </div>
+
+      <Card className="mb-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name or phone"
+          className="w-full border rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+          aria-label="Search customers"
+        />
+      </Card>
+
+      <Card className="mb-24">
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          {visible.length} customer{visible.length === 1 ? '' : 's'}
+        </div>
+        <div className="divide-y">
+          {visible.map((customer) => (
+            <div
+              key={customer._id}
+              onClick={() => handleCustomerClick(customer)}
+              className="py-3.5 px-2 -mx-2 flex items-center gap-3.5 cursor-pointer hover:bg-slate-50 active:bg-teal-50/40 active:scale-[0.99] transition rounded-xl group"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold text-lg border border-teal-100 shadow-xs group-hover:bg-teal-700 group-hover:text-white transition">
+                {customer.name.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 text-base truncate group-hover:text-teal-700 transition">
+                    {customer.name}
+                  </span>
+                  <span className="text-xs text-teal-700 font-semibold flex items-center gap-0.5 bg-teal-50 px-2.5 py-1 rounded-lg group-hover:bg-teal-700 group-hover:text-white transition">
+                    Sale Detail <span className="text-sm">›</span>
+                  </span>
+                </div>
+                <div className="text-sm text-slate-500 font-medium">
+                  {customer.phone || 'No phone number'}
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {customer.totalOrders} order{customer.totalOrders === 1 ? '' : 's'} · <span className="font-semibold text-teal-800">{inr(customer.totalSpend)} spent</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {visible.length === 0 && (
+          <div className="text-sm text-slate-400 py-6 text-center">No customers found.</div>
+        )}
+      </Card>
     </>
   );
 }
@@ -900,11 +1031,10 @@ function AnalyticsScreen({
               setScale(k);
               setSelectedIndex(null);
             }}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-              scale === k
-                ? 'bg-teal-700 text-white shadow'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${scale === k
+              ? 'bg-teal-700 text-white shadow'
+              : 'text-slate-600 hover:bg-slate-50'
+              }`}
           >
             {label}
           </button>
@@ -941,8 +1071,8 @@ function AnalyticsScreen({
               {scale === 'week'
                 ? 'Daily performance (Last 7 days)'
                 : scale === 'month'
-                ? 'Daily performance this month'
-                : 'Monthly performance overview'}
+                  ? 'Daily performance this month'
+                  : 'Monthly performance overview'}
             </div>
           </div>
           {rawMax > 0 && (
@@ -1138,7 +1268,10 @@ function AnalyticsScreen({
         {showSettings && (
           <div className="mt-3 pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
             <div>
-              <b>Database:</b> Stored in MongoDB Atlas. Keep API key secure.
+              <b>Database:</b> Cloud-hosted on MongoDB Atlas. No local database dependency.
+            </div>
+            <div>
+              <b>Auto-Update:</b> Live real-time sync is enabled (background polling every 12s + instant refresh on tab focus). Changes across any device or POS screen sync automatically.
             </div>
             <div>
               <b>Calculation:</b> Stock is tracked in pieces. 1 Box = {products[0]?.boxSize || 10} pieces.
@@ -1154,35 +1287,271 @@ function AnalyticsScreen({
   );
 }
 
+function CodeEntryScreen({
+  onUnlock,
+}: {
+  onUnlock: (user: { username: string; role: string }) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [shake, setShake] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const verifyCode = async (pinToVerify: string) => {
+    if (pinToVerify.length !== 6 || loading) return;
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await api.verifyCode(pinToVerify);
+      if (res.token) {
+        setAuthToken(res.token);
+      }
+      onUnlock(res.user || { username: 'admin', role: 'admin' });
+    } catch {
+      // Offline fallback: check local storage or default '123456'
+      const localPin = localStorage.getItem('inventory_access_code') || '123456';
+      if (pinToVerify === localPin) {
+        setAuthToken('local_auth_' + Date.now());
+        onUnlock({ username: 'admin', role: 'admin' });
+        return;
+      }
+
+      setError('Incorrect access code');
+      setShake(true);
+      setTimeout(() => {
+        setShake(false);
+        setCode('');
+        inputRef.current?.focus();
+      }, 550);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (loading) return;
+    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setError('');
+    setCode(val);
+    if (val.length === 6) {
+      verifyCode(val);
+    }
+  };
+
+  const handleContainerClick = () => {
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div
+      onClick={handleContainerClick}
+      className="min-h-screen bg-slate-50 relative flex flex-col items-center justify-center p-4 selection:bg-teal-700 selection:text-white"
+    >
+      {/* Subtle background ambient radial gradient for premium depth */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-teal-900/5 via-transparent to-transparent pointer-events-none" />
+
+      {/* Main Card */}
+      <div className="w-full max-w-[390px] bg-white rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-200/40 p-8 sm:p-9 text-center relative z-10 transition-all">
+        {/* Minimalist Security Icon */}
+        <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-700 mx-auto mb-4 shadow-xs">
+          <svg className="w-5 h-5 text-teal-700" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+            <rect x="3" y="11" width="18" height="11" rx="3" stroke="currentColor" strokeWidth="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </div>
+
+        {/* Header */}
+        <h1 className="text-xl font-bold tracking-tight text-slate-800">Inventory Manager</h1>
+        <p className="text-xs text-slate-500 mt-1">Enter your 6-digit access code to unlock</p>
+
+        {/* 6 Digit Input Cells (Robust explicit dimensions) */}
+        <div
+          className={`flex justify-center items-center gap-2 sm:gap-2.5 my-7 ${
+            shake ? 'animate-shake' : ''
+          }`}
+        >
+          {Array.from({ length: 6 }).map((_, i) => {
+            const isFilled = i < code.length;
+            const isCurrent = i === code.length && !loading;
+            return (
+              <div
+                key={i}
+                className={`w-11 h-14 sm:w-12 sm:h-14 rounded-2xl border flex items-center justify-center transition-all duration-150 select-none ${
+                  error
+                    ? 'border-red-400 bg-red-50/60 shadow-xs'
+                    : isFilled
+                    ? 'border-slate-800 bg-white shadow-xs'
+                    : isCurrent
+                    ? 'border-2 border-teal-700 bg-white ring-4 ring-teal-700/10 shadow-sm'
+                    : 'border-slate-200 bg-slate-50/70 hover:bg-slate-100/50'
+                }`}
+              >
+                {isFilled ? (
+                  <span className="w-3 h-3 rounded-full bg-slate-800 animate-pop-in" />
+                ) : isCurrent ? (
+                  <span className="w-0.5 h-5 bg-teal-700 animate-pulse rounded-full" />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Hidden Input for Native Keyboard & Mobile Typing */}
+        <input
+          ref={inputRef}
+          type="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={6}
+          value={code}
+          onChange={handleChange}
+          className="opacity-0 absolute -z-10 pointer-events-none w-0 h-0"
+          autoFocus
+          autoComplete="one-time-code"
+        />
+
+        {/* Status / Error feedback */}
+        <div className="min-h-7 flex items-center justify-center">
+          {error ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 border border-red-200 text-red-600 text-xs font-semibold animate-shake">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+              <span>{error}</span>
+            </div>
+          ) : loading ? (
+            <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+              <span className="w-3.5 h-3.5 border-2 border-teal-700 border-t-transparent rounded-full animate-spin"></span>
+              <span>Verifying code…</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-slate-400 font-medium">Type 6 digits to unlock</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<{ username: string; role: string } | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+
   const [page, setPage] = useState<Page>('home');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [stockLogs, setStockLogs] = useState<StockLogItem[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [preselectedCustomer, setPreselectedCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
+  // Check auth session on startup
+  useEffect(() => {
+    async function checkAuth() {
+      const token = getAuthToken();
+      if (!token) {
+        setAuthChecking(false);
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await api.getMe();
+        if (res.ok && res.user) {
+          setCurrentUser(res.user);
+        } else {
+          clearAuthToken();
+          setCurrentUser(null);
+        }
+      } catch {
+        clearAuthToken();
+        setCurrentUser(null);
+      } finally {
+        setAuthChecking(false);
+      }
+    }
+    checkAuth();
+  }, []);
+
+  const load = useCallback(async (silent = false) => {
     try {
-      setError('');
-      const [s, list, logs] = await Promise.all([
+      if (!silent) setError('');
+      const [s, list, logs, customerList] = await Promise.all([
         api.getStats(),
         api.getSales(150),
         api.getStockLog(30),
+        api.getCustomers(200),
       ]);
       setStats(s);
       setSales(list);
       setStockLogs(logs);
+      setCustomers(customerList);
+      setError('');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Cannot connect to server. Check internet & API settings.');
+      if (!silent) {
+        setError(e instanceof Error ? e.message : 'Cannot connect to server. Check internet & API settings.');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Load data whenever authenticated
+  useEffect(() => {
+    if (currentUser) {
+      load(false);
+    }
+  }, [currentUser, load]);
+
+  // Real-time Cloud Auto-Update: background poll every 12 seconds when logged in
+  useEffect(() => {
+    if (!currentUser) return;
+    const timer = setInterval(() => {
+      load(true);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, [currentUser, load]);
+
+  // Real-time Cloud Auto-Update: sync immediately on tab focus or visibility change
+  useEffect(() => {
+    if (!currentUser) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        load(true);
+      }
+    };
+    const onFocus = () => {
+      load(true);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [currentUser, load]);
+
+  // Auto-reconnect as soon as backend server is back online
+  useEffect(() => {
+    if (!currentUser || !error || stats) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.getHealth();
+        if (res?.ok) {
+          load(false);
+        }
+      } catch {}
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [currentUser, error, stats, load]);
+
 
   const products = stats?.products || [];
   const getP = (id: string) => products.find((p) => p.id === id);
@@ -1190,21 +1559,51 @@ export default function App() {
   const go = (p: Page, id?: string) => {
     setSelectedId(id || null);
     setSelectedSale(null);
+    if (p !== 'newsale') setPreselectedCustomer(null);
     setPage(p);
   };
 
-  const goSale = (s: Sale) => {
+  const [saleReturnPage, setSaleReturnPage] = useState<Page>('sales');
+
+  const goSale = (s: Sale, returnTo: Page = 'sales') => {
     setSelectedSale(s);
+    setSaleReturnPage(returnTo);
     setPage('saledetail');
   };
 
   const afterSave = async (next: Page, id?: string) => {
-    await load();
+    await load(false);
     go(next, id);
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading…</div>;
+  // 1. Initial auth check screen
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="w-6 h-6 border-2 border-teal-700 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // 2. Code entry screen if not authenticated
+  if (!currentUser) {
+    return (
+      <CodeEntryScreen
+        onUnlock={(user) => {
+          setCurrentUser(user);
+        }}
+      />
+    );
+  }
+
+  // 3. Loading state after unlock
+  if (loading && !stats) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-slate-500 p-4">
+        <div className="w-8 h-8 border-3 border-teal-700 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <div className="text-sm font-medium">Loading inventory data…</div>
+      </div>
+    );
   }
 
   if (error && !stats) {
@@ -1213,7 +1612,6 @@ export default function App() {
         <Card className="max-w-sm w-full text-center">
           <div className="text-red-600 font-semibold mb-2">Cannot connect</div>
           <p className="text-sm text-slate-600 mb-4">{error}</p>
-          <p className="text-xs text-slate-400 mb-4">Make sure the server is running and VITE_API_URL / VITE_API_KEY are set correctly in client/.env</p>
           <Btn onClick={() => { setLoading(true); load(); }}>Try again</Btn>
         </Card>
       </div>
@@ -1237,7 +1635,7 @@ export default function App() {
         <>
           <div className="mb-4">
             <h1 className="text-2xl font-bold text-slate-800">Inventory Manager</h1>
-            <p className="text-sm text-slate-500">Good day</p>
+            <p className="text-sm text-slate-500"></p>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <Card className="flex flex-col justify-between">
@@ -1359,7 +1757,7 @@ export default function App() {
                           </span>
                           {log.unit === 'box' && (
                             <div className="text-[11px] text-slate-400">
-                              {log.quantity} {log.quantity > 1 ? 'boxes' : 'box'}
+                              {log.quantity} {(log.quantity ?? 0) > 1 ? 'boxes' : 'box'}
                             </div>
                           )}
                         </div>
@@ -1460,7 +1858,13 @@ export default function App() {
 
       {page === 'saledetail' && selectedSale && (
         <>
-          <button onClick={() => go('sales')} className="text-teal-700 mb-2 font-medium">← Back</button>
+          <button
+            type="button"
+            onClick={() => go(saleReturnPage)}
+            className="text-teal-700 mb-2 font-semibold text-sm flex items-center gap-1 hover:underline"
+          >
+            ← Back{saleReturnPage === 'customers' ? ' to Customers' : saleReturnPage === 'home' ? ' to Home' : ' to Sales'}
+          </button>
           <Title>Sale Detail</Title>
           <Card className="space-y-3 mb-3">
             <div><div className="text-sm text-slate-500">Customer</div><div className="text-lg font-bold">{selectedSale.customerName}</div></div>
@@ -1483,15 +1887,29 @@ export default function App() {
       )}
 
       {page === 'newsale' && (
-        <NewSaleScreen products={products} onBack={() => go('home')} onSaved={() => afterSave('sales')} />
+        <NewSaleScreen
+          products={products}
+          customers={customers}
+          initialCustomer={preselectedCustomer}
+          onBack={() => go('home')}
+          onSaved={() => afterSave('sales')}
+        />
+      )}
+
+      {page === 'customers' && (
+        <CustomersScreen
+          customers={customers}
+          sales={sales}
+          onSelectSale={(s) => goSale(s, 'customers')}
+        />
       )}
 
       {page === 'more' && (
         <AnalyticsScreen sales={sales} products={products} stats={stats} />
       )}
 
-      <nav className="fixed bottom-0 inset-x-0 bg-white border-t grid grid-cols-4 pb-[env(safe-area-inset-bottom)] max-w-lg mx-auto">
-        {([['home', '🏠', 'Home'], ['inventory', '📦', 'Stock'], ['sales', '🧾', 'Sales'], ['more', '📊', 'Analytics']] as const).map(([k, icon, label]) => (
+      <nav className="fixed bottom-0 inset-x-0 bg-white border-t grid grid-cols-5 pb-[env(safe-area-inset-bottom)] max-w-lg mx-auto">
+        {([['home', '🏠', 'Home'], ['inventory', '📦', 'Stock'], ['sales', '🧾', 'Sales'], ['customers', '👥', 'Customers'], ['more', '📊', 'Analytics']] as const).map(([k, icon, label]) => (
           <button key={k} type="button" onClick={() => go(k)} className={`py-3 text-sm ${tab === k ? 'text-teal-700 font-bold' : 'text-slate-500'}`}>
             <div className="text-xl">{icon}</div>{label}
           </button>

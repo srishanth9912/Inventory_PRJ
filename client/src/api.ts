@@ -1,12 +1,34 @@
 const API = (import.meta as any).env.VITE_API_URL || '';
-const KEY = (import.meta as any).env.VITE_API_KEY || '';
+
+const TOKEN_KEY = 'ifb_admin_auth_token';
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch { }
+}
+
+export function clearAuthToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch { }
+}
 
 async function req(path: string, options: RequestInit = {}) {
-  const res = await fetch(API + path, {
+  const token = getAuthToken();
+  const res = await fetch(`${API}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': KEY,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -15,13 +37,25 @@ async function req(path: string, options: RequestInit = {}) {
     let msg = text;
     try {
       msg = JSON.parse(text).error || text;
-    } catch {}
+    } catch { }
     throw new Error(msg || res.statusText);
   }
   return res.json();
 }
 
 export const api = {
+  login: (username: string, password: string) =>
+    req('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  getMe: () => req('/auth/me'),
+  changePassword: (oldPassword: string, newPassword: string) =>
+    req('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ oldPassword, newPassword }),
+    }),
+  getHealth: () => req('/health'),
   getProducts: () => req('/products'),
   updateProduct: (id: string, data: any) =>
     req(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -35,6 +69,13 @@ export const api = {
     req('/sales', { method: 'POST', body: JSON.stringify(data) }),
   getStats: () => req('/stats'),
   getStockLog: (limit = 30) => req(`/stock/log?limit=${limit}`),
+  getCustomers: (limit = 200) => req(`/customers?limit=${limit}`),
+  createCustomer: (data: { name: string; phone?: string; notes?: string }) =>
+    req('/customers', { method: 'POST', body: JSON.stringify(data) }),
+  updateCustomer: (id: string, data: { name?: string; phone?: string; notes?: string }) =>
+    req(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteCustomer: (id: string) =>
+    req(`/customers/${id}`, { method: 'DELETE' }),
 };
 
 export function inr(n: number) {

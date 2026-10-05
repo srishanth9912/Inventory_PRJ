@@ -15,6 +15,10 @@ dist/
 */dist/
 .vite/
 
+# Local database store
+server/data/
+data/
+
 # Logs & OS files
 *.log
 .DS_Store

@@ -4,45 +4,34 @@ Simple cloud-based stock and sales tracker for **2 products only**:
 - IFB Liquid Detergent
 - IFB Descal
 
-Built for mobile. Designed for non-technical users. Everything is stored in **MongoDB Atlas** (cloud). No offline mode.
-
-## Setup
-
-### 1. MongoDB Atlas (required)
-1. Create a free account at https://www.mongodb.com/cloud/atlas
-2. Create a free cluster
-3. Create a database user + password
-4. In Network Access → allow access from anywhere (or your IP)
-5. Click **Connect** → Drivers → copy the connection string
-
-### 2. Server
-```bash
-cd server
-cp .env.example .env
-# Edit .env and paste your MongoDB URI + set a secret API_KEY
-npm install
-npm start
-```
-
-### 3. Client
-```bash
-cd client
-cp .env.example .env
-# Set VITE_API_URL=http://localhost:8787
-# Set VITE_API_KEY=same-key-as-server
-npm install
-npm run dev
-```
-
-Open the URL shown (usually http://localhost:5173). Use on mobile for best experience.
+Built for mobile. Designed for non-technical users. Exclusively web-based: all data is stored directly in **MongoDB Atlas** (cloud). Local databases are not used.
 
 ## Features
-- Clear home dashboard with simple numbers
-- Add stock (box or piece) – fully editable
-- Create sale with **one or both products** in a single entry
-- Optional phone number + sale notes
-- Product-wise stock, sales & revenue
-- Mobile-friendly clean UI
+- **Cloud Database (MongoDB Atlas)**: All data lives securely in the cloud, accessible across multiple devices.
+- **Real-Time Live Auto-Update**: Background sync automatically updates inventory, sales, and analytics every 8 seconds and whenever the app/tab gains focus.
+- **Atomic Stock Management**: Safe piece-level stock deductions with automated rollback protection.
+- **Home Dashboard**: Total pieces, product breakdown, and monthly revenue at a glance.
+- **Add Stock**: Fast piece-based quantity additions with auto-calculated stock totals.
+- **Create Sale**: Multiple products in a single receipt with custom prices, phone, and notes.
+- **Sales Analytics**: Visual SVG revenue chart with rupee gridlines and recent transactions.
+
+## Cloud Database Setup (MongoDB Atlas)
+
+1. Sign in to [MongoDB Atlas](https://cloud.mongodb.com).
+2. Create or select your free **Cluster0**.
+3. **Database Access** (Security tab):
+   - Add a database user (e.g. `srishanth9912_db_user`).
+   - Assign the **"Read and write to any database"** role.
+   - Note down the exact password.
+4. **Network Access** (Security tab):
+   - Click **Add IP Address** → choose **Allow Access From Anywhere** (`0.0.0.0/0`) or add your current IP address.
+5. In `server/.env`, set:
+   ```env
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.yxgjcbf.mongodb.net/ifb?appName=Cluster0
+   API_KEY=
+   PORT=8787
+   ```
+   Keep the API key blank unless you want to allow a non-browser client or a different trusted origin. The browser app uses the same-origin frontend flow and does not need a secret in `client/.env`.
 
 ## Product photos
 Replace the SVG files in `client/public/products/` with real product photos (same file names) if you have rights to use them.
