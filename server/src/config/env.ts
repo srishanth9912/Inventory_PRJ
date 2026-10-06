@@ -23,6 +23,28 @@ function requiredSecret(name: string): string {
   return value;
 }
 
+function requiredMongoUri(): string {
+  const value = requiredEnv('MONGODB_URI');
+  if (!/^mongodb(\+srv)?:\/\//.test(value) || /\s/.test(value)) {
+    throw new Error(
+      'MONGODB_URI must be a valid MongoDB URI without whitespace'
+    );
+  }
+  if ((value.match(/@/g) || []).length !== 1) {
+    throw new Error(
+      'MONGODB_URI contains an unencoded credential character; URL-encode the username or password'
+    );
+  }
+  try {
+    new URL(value);
+  } catch {
+    throw new Error(
+      'MONGODB_URI is invalid; URL-encode special characters in the username or password'
+    );
+  }
+  return value;
+}
+
 function requiredAccessPin(): string {
   const value = requiredEnv('ACCESS_PIN');
   if (!/^\d{6}$/.test(value)) {
@@ -32,7 +54,7 @@ function requiredAccessPin(): string {
 }
 
 export const env = {
-  MONGODB_URI: requiredEnv('MONGODB_URI'),
+  MONGODB_URI: requiredMongoUri(),
   DB_NAME: requiredEnv('DB_NAME'),
   PORT: parseInt(process.env.PORT || '8787', 10),
   API_KEY: process.env.API_KEY || '',
