@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
-import { getCollections } from '../db/connection.js';
+import { getCollections, getDb } from '../db/connection.js';
 
 // Custom admin credentials store in DB or fallback to env
 interface AdminDoc {
@@ -72,8 +72,8 @@ export async function loginAdmin(
   let isValid = false;
 
   try {
-    const db = getCollections();
-    const adminsCol = db.products.db.collection<AdminDoc>('admins');
+    const db = getDb();
+    const adminsCol = db.collection<AdminDoc>('admins');
     const adminDoc = await adminsCol.findOne({ username });
 
     if (adminDoc) {
@@ -102,6 +102,26 @@ export async function loginAdmin(
   };
 }
 
+export async function verifyAccessCode(
+  codeInput: string
+): Promise<{ token: string; user: { username: string; role: string } }> {
+  const code = String(codeInput || '').trim();
+  if (!code || code.length !== 6) {
+    throw new Error('A 6-digit access code is required');
+  }
+
+  const expectedPin = env.ACCESS_PIN;
+  if (code !== expectedPin) {
+    throw new Error('Incorrect access code');
+  }
+
+  const token = createToken({ username: 'admin', role: 'admin' });
+  return {
+    token,
+    user: { username: 'admin', role: 'admin' },
+  };
+}
+
 export async function changeAdminPassword(
   username: string,
   oldPassword: string,
@@ -114,8 +134,8 @@ export async function changeAdminPassword(
   // Verify old password first
   await loginAdmin(username, oldPassword);
 
-  const db = getCollections();
-  const adminsCol = db.products.db.collection<AdminDoc>('admins');
+  const db = getDb();
+  const adminsCol = db.collection<AdminDoc>('admins');
   const salt = crypto.randomBytes(16).toString('hex');
   const passwordHash = hashPassword(newPassword, salt);
 

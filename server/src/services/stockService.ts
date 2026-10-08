@@ -39,8 +39,9 @@ export async function addStock(
   return updated;
 }
 
-export async function getStockLogs(limit = 30): Promise<StockLog[]> {
+export async function getStockLogs(limit = 20, skip = 0): Promise<StockLog[]> {
   const { stockLog } = getCollections();
   const boundedLimit = Math.min(Math.max(limit, 1), 100);
-  return stockLog.find({}).sort({ at: -1 }).limit(boundedLimit).toArray();
+  const safeSkip = Math.max(0, skip);
+  return stockLog.find({}).sort({ at: -1 }).skip(safeSkip).limit(boundedLimit).toArray();
 }

@@ -2,10 +2,11 @@ import { ObjectId } from 'mongodb';
 import { getCollections } from '../db/connection.js';
 import type { Customer } from '../types/index.js';
 
-export async function getCustomers(limit = 200): Promise<Customer[]> {
+export async function getCustomers(limit = 30, skip = 0): Promise<Customer[]> {
   const { customers } = getCollections();
   const boundedLimit = Math.min(Math.max(limit, 1), 500);
-  return customers.find({}).sort({ updatedAt: -1 }).limit(boundedLimit).toArray();
+  const safeSkip = Math.max(0, skip);
+  return customers.find({}).sort({ updatedAt: -1 }).skip(safeSkip).limit(boundedLimit).toArray();
 }
 
 export async function createOrUpdateCustomer(input: {

@@ -4,7 +4,7 @@ import type { Product } from '../types/index.js';
 export const SEED_PRODUCTS: Array<Omit<Product, '_id'>> = [
   {
     id: 'detergent',
-    name: 'IFB Liquid Detergent',
+    name: 'Liquid Detergent',
     description: '945 ml',
     imageUrl: '/products/detergent.jpg',
     defaultPricePerPiece: 150,
@@ -15,7 +15,7 @@ export const SEED_PRODUCTS: Array<Omit<Product, '_id'>> = [
   },
   {
     id: 'descal',
-    name: 'IFB Descal',
+    name: 'Descaler Powder',
     description: '100 g',
     imageUrl: '/products/descal.jpg',
     defaultPricePerPiece: 200,

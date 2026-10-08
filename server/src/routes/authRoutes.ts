@@ -1,5 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { loginAdmin, verifyToken, changeAdminPassword } from '../services/authService.js';
+import {
+  loginAdmin,
+  verifyToken,
+  verifyAccessCode,
+  changeAdminPassword,
+} from '../services/authService.js';
 
 interface LoginBody {
   username?: string;
@@ -12,6 +17,21 @@ interface ChangePasswordBody {
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
+  // 6-digit PIN verify route
+  app.post('/auth/verify-code', async (req: FastifyRequest<{ Body: { code?: string } }>, reply: FastifyReply) => {
+    try {
+      const { code = '' } = req.body || {};
+      const result = await verifyAccessCode(code);
+      return reply.code(200).send({
+        ok: true,
+        token: result.token,
+        user: result.user,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Incorrect access code';
+      return reply.code(401).send({ ok: false, error: message });
+    }
+  });
   // Login route
   app.post('/auth/login', async (req: FastifyRequest<{ Body: LoginBody }>, reply: FastifyReply) => {
     try {

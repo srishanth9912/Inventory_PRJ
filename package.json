@@ -6,6 +6,7 @@
     "dev": "node start-dev.js",
     "dev:client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",
-    "build": "npm run build --prefix client"
+    "build": "npm run build --prefix client",
+    "typecheck": "npm run typecheck --prefix client && npm run typecheck --prefix server"
   }
 }

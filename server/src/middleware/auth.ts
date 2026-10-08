@@ -1,16 +1,29 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { env, isOriginPermitted } from '../config/env.js';
+import { verifyToken } from '../services/authService.js';
 
 export async function authHook(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (req.method === 'OPTIONS') return;
   if (req.url === '/health' || req.url === '/db/status' || req.url.startsWith('/auth/')) return;
 
+  // 1. API key header
   if (env.API_KEY) {
     if (req.headers['x-api-key'] === env.API_KEY) return;
     reply.code(401).send({ ok: false, error: 'Unauthorized: Invalid API key' });
     return;
   }
 
+  // 2. Bearer JWT authorization token
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    const user = verifyToken(token);
+    if (user) {
+      return;
+    }
+  }
+
+  // 3. Origin check (for trusted frontend origins)
   const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
   const isAllowed = isOriginPermitted(origin);
   const host = typeof req.headers.host === 'string' ? req.headers.host : '';

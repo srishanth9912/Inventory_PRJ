@@ -9,12 +9,15 @@ import { customerRoutes } from './routes/customerRoutes.js';
 import { statsRoutes } from './routes/statsRoutes.js';
 import { healthRoutes } from './routes/healthRoutes.js';
 import { authRoutes } from './routes/authRoutes.js';
+import { isOriginPermitted } from './config/env.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
   // 1. CORS plugin
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin: (origin, callback) => callback(null, !origin || isOriginPermitted(origin)),
+  });
 
   // 2. Authentication & security hook
   app.addHook('onRequest', authHook);

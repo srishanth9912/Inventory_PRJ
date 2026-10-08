@@ -279,19 +279,39 @@ function EditProductScreen({
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       setErr('Product name cannot be empty');
       return;
     }
+
+    const numPrice = Number(price);
+    if (price === '' || isNaN(numPrice) || numPrice < 0) {
+      setErr('Please enter a valid price (cannot be negative)');
+      return;
+    }
+
+    const numBox = Number(boxSize);
+    if (boxSize === '' || !Number.isInteger(numBox) || numBox < 1) {
+      setErr('Pieces in one box must be a whole number of at least 1');
+      return;
+    }
+
+    const numLow = Number(low);
+    if (low === '' || !Number.isInteger(numLow) || numLow < 0) {
+      setErr('Low stock warning must be a whole number of 0 or greater');
+      return;
+    }
+
     setSaving(true);
     setErr('');
     try {
       await api.updateProduct(product.id, {
-        name: name.trim(),
+        name: trimmedName,
         description: desc,
-        defaultPricePerPiece: Math.max(0, Number(price) || 0),
-        boxSize: Math.max(1, Number(boxSize) || 1),
-        lowStockLimit: Math.max(0, Number(low) || 0),
+        defaultPricePerPiece: numPrice,
+        boxSize: numBox,
+        lowStockLimit: numLow,
       });
       onSaved();
     } catch (e: unknown) {
@@ -703,8 +723,8 @@ function CustomersScreen({
     `${c.name} ${c.phone || ''}`.toLowerCase().includes(query.toLowerCase())
   );
 
-  const handleCustomerClick = (customer: Customer) => {
-    // Find matching sales for this customer
+  const handleCustomerClick = async (customer: Customer) => {
+    // Find matching sales in memory
     const matchingSales = sales.filter((s) => {
       if (s.customerId && s.customerId === customer._id) return true;
       if (s.phone && customer.phone && s.phone === customer.phone) return true;
@@ -713,8 +733,18 @@ function CustomersScreen({
     });
 
     if (matchingSales.length > 0) {
-      // Directly open the Sale Detail!
       onSelectSale?.(matchingSales[0]);
+      return;
+    }
+
+    // If beyond the latest in-memory limit, fetch specifically for this customer
+    try {
+      const remoteSales = await api.getSales(10, customer._id);
+      if (remoteSales && remoteSales.length > 0) {
+        onSelectSale?.(remoteSales[0]);
+      }
+    } catch {
+      // ignore network errors
     }
   };
 
@@ -802,13 +832,22 @@ function AnalyticsScreen({
     return true;
   });
 
-  const totalRevenue = filteredSales.reduce((acc, s) => acc + s.totalAmount, 0);
-  const totalBills = filteredSales.length;
+  const totalRevenue =
+    scale === 'month' && stats
+      ? stats.month.revenue
+      : filteredSales.reduce((acc, s) => acc + s.totalAmount, 0);
+  const totalBills =
+    scale === 'month' && stats
+      ? stats.month.saleCount
+      : filteredSales.length;
   const avgBill = totalBills > 0 ? Math.round(totalRevenue / totalBills) : 0;
-  const totalPieces = filteredSales.reduce(
-    (acc, s) => acc + s.items.reduce((sum, it) => sum + it.pieces, 0),
-    0
-  );
+  const totalPieces =
+    scale === 'month' && stats
+      ? stats.month.pieces
+      : filteredSales.reduce(
+        (acc, s) => acc + s.items.reduce((sum, it) => sum + it.pieces, 0),
+        0
+      );
 
   type Bucket = {
     key: string;
@@ -1372,9 +1411,8 @@ function CodeEntryScreen({
 
         {/* 6 Digit Input Cells (Robust explicit dimensions) */}
         <div
-          className={`flex justify-center items-center gap-2 sm:gap-2.5 my-7 ${
-            shake ? 'animate-shake' : ''
-          }`}
+          className={`flex justify-center items-center gap-2 sm:gap-2.5 my-7 ${shake ? 'animate-shake' : ''
+            }`}
         >
           {Array.from({ length: 6 }).map((_, i) => {
             const isFilled = i < code.length;
@@ -1382,15 +1420,14 @@ function CodeEntryScreen({
             return (
               <div
                 key={i}
-                className={`w-11 h-14 sm:w-12 sm:h-14 rounded-2xl border flex items-center justify-center transition-all duration-150 select-none ${
-                  error
-                    ? 'border-red-400 bg-red-50/60 shadow-xs'
-                    : isFilled
+                className={`w-11 h-14 sm:w-12 sm:h-14 rounded-2xl border flex items-center justify-center transition-all duration-150 select-none ${error
+                  ? 'border-red-400 bg-red-50/60 shadow-xs'
+                  : isFilled
                     ? 'border-slate-800 bg-white shadow-xs'
                     : isCurrent
-                    ? 'border-2 border-teal-700 bg-white ring-4 ring-teal-700/10 shadow-sm'
-                    : 'border-slate-200 bg-slate-50/70 hover:bg-slate-100/50'
-                }`}
+                      ? 'border-2 border-teal-700 bg-white ring-4 ring-teal-700/10 shadow-sm'
+                      : 'border-slate-200 bg-slate-50/70 hover:bg-slate-100/50'
+                  }`}
               >
                 {isFilled ? (
                   <span className="w-3 h-3 rounded-full bg-slate-800 animate-pop-in" />
@@ -1547,7 +1584,7 @@ export default function App() {
         if (res?.ok) {
           load(false);
         }
-      } catch {}
+      } catch { }
     }, 2500);
     return () => clearInterval(interval);
   }, [currentUser, error, stats, load]);

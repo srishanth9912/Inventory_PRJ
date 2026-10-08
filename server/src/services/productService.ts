@@ -34,7 +34,7 @@ export async function updateProduct(
     throw new Error('Low stock limit must be a non-negative integer');
   }
 
-  const allowed: (keyof UpdateProductInput)[] = [
+  const allowed = [
     'name',
     'description',
     'defaultPricePerPiece',
@@ -42,7 +42,7 @@ export async function updateProduct(
     'currentStock',
     'lowStockLimit',
     'imageUrl',
-  ];
+  ] as const;
 
   const update: Record<string, unknown> = { updatedAt: Date.now() };
   for (const k of allowed) {

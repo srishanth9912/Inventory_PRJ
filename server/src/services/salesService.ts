@@ -15,10 +15,19 @@ export interface CreateSaleParams {
   }>;
 }
 
-export async function getSales(limit = 100): Promise<Sale[]> {
+export async function getSales(limit = 25, customerId?: string, skip = 0): Promise<Sale[]> {
   const { sales } = getCollections();
-  const boundedLimit = Math.min(Math.max(limit, 1), 500);
-  return sales.find({}).sort({ soldAt: -1 }).limit(boundedLimit).toArray();
+  const boundedLimit = Math.min(Math.max(limit, 1), 1000);
+  const safeSkip = Math.max(0, skip);
+  const filter: Record<string, unknown> = {};
+  if (customerId) {
+    const validOid = ObjectId.isValid(customerId);
+    filter.$or = [
+      { customerId: customerId },
+      ...(validOid ? [{ customerId: new ObjectId(customerId) }] : []),
+    ];
+  }
+  return sales.find(filter).sort({ soldAt: -1 }).skip(safeSkip).limit(boundedLimit).toArray();
 }
 
 export async function createSale(params: CreateSaleParams): Promise<Sale> {

@@ -7,9 +7,10 @@ import {
 } from '../services/customerService.js';
 
 export const customerRoutes: FastifyPluginAsync = async (app) => {
-  app.get<{ Querystring: { limit?: string } }>('/customers', async (req) => {
-    const limit = parseInt(req.query.limit || '200', 10);
-    return getCustomers(limit);
+  app.get<{ Querystring: { limit?: string; skip?: string } }>('/customers', async (req) => {
+    const limit = parseInt(req.query.limit || '30', 10);
+    const skip = parseInt(req.query.skip || '0', 10);
+    return getCustomers(limit, skip);
   });
 
   app.post<{ Body: { name: string; phone?: string; notes?: string } }>(

@@ -17,6 +17,16 @@ export interface Product {
   updatedAt: number;
 }
 
+export interface UpdateProductInput {
+  name?: string;
+  description?: string;
+  defaultPricePerPiece?: number | string;
+  boxSize?: number | string;
+  currentStock?: number | string;
+  lowStockLimit?: number | string;
+  imageUrl?: string;
+}
+
 export interface SaleItem {
   productId: string;
   productName: string;

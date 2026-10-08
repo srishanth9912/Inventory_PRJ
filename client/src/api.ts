@@ -44,6 +44,11 @@ async function req(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
+  verifyCode: (code: string) =>
+    req('/auth/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
   login: (username: string, password: string) =>
     req('/auth/login', {
       method: 'POST',
@@ -64,7 +69,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ productId, unit, quantity }),
     }),
-  getSales: (limit = 100) => req(`/sales?limit=${limit}`),
+  getSales: (limit = 100, customerId?: string) => {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (customerId) q.set('customerId', customerId);
+    return req(`/sales?${q.toString()}`);
+  },
   createSale: (data: any) =>
     req('/sales', { method: 'POST', body: JSON.stringify(data) }),
   getStats: () => req('/stats'),

@@ -53,10 +53,18 @@ function requiredAccessPin(): string {
   return value;
 }
 
+function serverPort(): number {
+  const value = Number.parseInt(process.env.PORT || '8787', 10);
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new Error('PORT must be an integer between 1 and 65535');
+  }
+  return value;
+}
+
 export const env = {
   MONGODB_URI: requiredMongoUri(),
   DB_NAME: requiredEnv('DB_NAME'),
-  PORT: parseInt(process.env.PORT || '8787', 10),
+  PORT: serverPort(),
   API_KEY: process.env.API_KEY || '',
   ADMIN_USERNAME: requiredEnv('ADMIN_USERNAME'),
   ADMIN_PASSWORD: requiredEnv('ADMIN_PASSWORD'),
@@ -66,9 +74,14 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
 };
 
+const configuredOrigins = (env.FRONTEND_ORIGIN || '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
 export const allowedOrigins = new Set(
   [
-    env.FRONTEND_ORIGIN,
+    ...configuredOrigins,
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:4173',
@@ -80,7 +93,8 @@ export const allowedOrigins = new Set(
 
 export function isOriginPermitted(origin: string): boolean {
   if (!origin) return false;
-  if (allowedOrigins.has(origin)) return true;
+  const normalized = origin.trim().replace(/\/+$/, '');
+  if (allowedOrigins.has(normalized)) return true;
   try {
     const parsed = new URL(origin);
     const hostname = parsed.hostname;
