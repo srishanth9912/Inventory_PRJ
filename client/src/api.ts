@@ -40,6 +40,14 @@ async function req(path: string, options: RequestInit = {}) {
     } catch { }
     throw new Error(msg || res.statusText);
   }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      'Backend server is not connected. The request returned HTML instead of data. Please set VITE_API_URL to your backend URL in Netlify.'
+    );
+  }
+
   return res.json();
 }
 
