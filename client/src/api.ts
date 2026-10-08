@@ -1,4 +1,8 @@
-const API = (import.meta as any).env.VITE_API_URL || '';
+// In production, requests go through the same-origin /api proxy function,
+// which forwards them to the backend configured via VITE_API_URL.
+// In development, the Vite dev server proxies requests to the local backend.
+const env = (import.meta as any).env;
+const API = env.DEV ? env.VITE_API_URL || '' : '/api';
 
 const TOKEN_KEY = 'ifb_admin_auth_token';
 
@@ -44,7 +48,7 @@ async function req(path: string, options: RequestInit = {}) {
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
     throw new Error(
-      'Backend server is not connected. The request returned HTML instead of data. Please set VITE_API_URL to your backend URL in Netlify.'
+      'Backend server is not connected. The request returned HTML instead of data. Please check that VITE_API_URL points to your backend in Netlify.'
     );
   }
 
