@@ -3,11 +3,12 @@
 const env = (import.meta as any).env;
 const API = env.DEV ? env.VITE_API_URL || '' : (env.VITE_API_URL || '/api');
 
-const TOKEN_KEY = 'ifb_admin_auth_token';
+const TOKEN_KEY = 'inventory_admin_auth_token';
+const LEGACY_TOKEN_KEY = 'ifb_admin_auth_token';
 
 export function getAuthToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
   } catch {
     return null;
   }
@@ -22,6 +23,7 @@ export function setAuthToken(token: string): void {
 export function clearAuthToken(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
   } catch { }
 }
 

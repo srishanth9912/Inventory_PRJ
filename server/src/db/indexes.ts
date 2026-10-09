@@ -24,5 +24,5 @@ export async function ensureIndexes(db: Db): Promise<void> {
     customers.createIndex({ name: 1 }),
   ]);
 
-  console.log('⚡ All database indexes verified and active in "ifb"!');
+  console.log('⚡ All database indexes verified and active!');
 }

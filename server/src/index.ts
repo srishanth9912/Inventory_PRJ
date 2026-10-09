@@ -37,7 +37,7 @@ async function bootstrap() {
 
     // 6. Start HTTP listener
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
-    console.log(`🚀 IFB Server active at http://0.0.0.0:${env.PORT} [MongoDB Atlas: "${env.DB_NAME}"]`);
+    console.log(`🚀 Inventory Server active at http://0.0.0.0:${env.PORT} [MongoDB Atlas: "${env.DB_NAME}"]`);
   } catch (err: any) {
     console.error('❌ Failed to start server:', err.message);
     process.exit(1);
