@@ -19,7 +19,16 @@ export async function buildApp(): Promise<FastifyInstance> {
     origin: (origin, callback) => callback(null, !origin || isOriginPermitted(origin)),
   });
 
-  // 2. Authentication & security hook
+  // 2. Strip /api prefix if present from Vercel top-level rewrite
+  app.addHook('onRequest', async (req) => {
+    if (req.url.startsWith('/api/')) {
+      req.raw.url = req.url.substring(4);
+    } else if (req.url === '/api') {
+      req.raw.url = '/';
+    }
+  });
+
+  // 3. Authentication & security hook
   app.addHook('onRequest', authHook);
 
   // 3. Centralized error handling
