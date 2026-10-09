@@ -77,7 +77,7 @@ export const env = {
 };
 
 export function isOriginPermitted(origin: string): boolean {
-  if (!origin) return false;
+  if (!origin) return true;
   const normalized = origin.trim().replace(/\/+$/, '');
   const configuredOrigins = (process.env.FRONTEND_ORIGIN || '')
     .split(',')
@@ -93,6 +93,8 @@ export function isOriginPermitted(origin: string): boolean {
       hostname === '127.0.0.1' ||
       hostname === '::1' ||
       hostname.endsWith('.vercel.app') ||
+      hostname.endsWith('.netlify.app') ||
+      hostname.endsWith('.onrender.com') ||
       /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
       /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
       /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname)

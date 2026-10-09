@@ -23,19 +23,36 @@ export async function authHook(req: FastifyRequest, reply: FastifyReply): Promis
     }
   }
 
-  // 3. Origin check (for trusted frontend origins)
+  // 3. Origin & Host check (allows trusted frontend origins and same-origin proxy requests)
   const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
-  const isAllowed = isOriginPermitted(origin);
-  const host = typeof req.headers.host === 'string' ? req.headers.host : '';
-  const isLocalDevProxy =
-    !origin &&
-    (req.ip === '127.0.0.1' ||
-      req.ip === '::1' ||
-      req.ip?.startsWith('192.168.') ||
-      req.ip?.startsWith('10.')) &&
-    (host.endsWith(`:${env.PORT}`) || host.endsWith(':5173'));
+  if (origin) {
+    if (isOriginPermitted(origin)) return;
+  } else {
+    // Same-origin GET requests or Vercel/Netlify proxy rewrites do not send an Origin header
+    const rawHost = (
+      typeof req.headers['x-forwarded-host'] === 'string'
+        ? req.headers['x-forwarded-host']
+        : typeof req.headers.host === 'string'
+          ? req.headers.host
+          : ''
+    ).split(',')[0]?.trim() || '';
 
-  if (isAllowed || isLocalDevProxy) return;
+    const hostname = rawHost.split(':')[0] || '';
+
+    if (
+      !hostname ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.endsWith('.vercel.app') ||
+      hostname.endsWith('.netlify.app') ||
+      hostname.endsWith('.onrender.com') ||
+      Boolean(process.env.VERCEL) ||
+      Boolean(process.env.NETLIFY)
+    ) {
+      return;
+    }
+  }
 
   reply.code(401).send({ ok: false, error: 'Unauthorized request origin' });
 }
