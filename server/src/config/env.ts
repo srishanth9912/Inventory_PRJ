@@ -1,10 +1,12 @@
 import dns from 'dns';
 
-// Fix Node.js SRV DNS resolution on Windows / restrictive local networks
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch {
-  // ignore
+// Fix Node.js SRV DNS resolution on Windows / restrictive local networks (local dev only)
+if (process.platform === 'win32' && !process.env.VERCEL) {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch {
+    // ignore
+  }
 }
 
 function requiredEnv(name: string): string {
@@ -62,39 +64,27 @@ function serverPort(): number {
 }
 
 export const env = {
-  MONGODB_URI: requiredMongoUri(),
-  DB_NAME: requiredEnv('DB_NAME'),
-  PORT: serverPort(),
-  API_KEY: process.env.API_KEY || '',
-  ADMIN_USERNAME: requiredEnv('ADMIN_USERNAME'),
-  ADMIN_PASSWORD: requiredEnv('ADMIN_PASSWORD'),
-  JWT_SECRET: requiredSecret('JWT_SECRET'),
-  ACCESS_PIN: requiredAccessPin(),
-  FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || '',
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  get MONGODB_URI() { return requiredMongoUri(); },
+  get DB_NAME() { return requiredEnv('DB_NAME'); },
+  get PORT() { return serverPort(); },
+  get API_KEY() { return process.env.API_KEY || ''; },
+  get ADMIN_USERNAME() { return requiredEnv('ADMIN_USERNAME'); },
+  get ADMIN_PASSWORD() { return requiredEnv('ADMIN_PASSWORD'); },
+  get JWT_SECRET() { return requiredSecret('JWT_SECRET'); },
+  get ACCESS_PIN() { return requiredAccessPin(); },
+  get FRONTEND_ORIGIN() { return process.env.FRONTEND_ORIGIN || ''; },
+  get NODE_ENV() { return process.env.NODE_ENV || 'development'; },
 };
-
-const configuredOrigins = (env.FRONTEND_ORIGIN || '')
-  .split(',')
-  .map((o) => o.trim().replace(/\/+$/, ''))
-  .filter(Boolean);
-
-export const allowedOrigins = new Set(
-  [
-    ...configuredOrigins,
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:4173',
-    'http://127.0.0.1:4173',
-    `http://localhost:${env.PORT}`,
-    `http://127.0.0.1:${env.PORT}`,
-  ].filter(Boolean) as string[]
-);
 
 export function isOriginPermitted(origin: string): boolean {
   if (!origin) return false;
   const normalized = origin.trim().replace(/\/+$/, '');
-  if (allowedOrigins.has(normalized)) return true;
+  const configuredOrigins = (process.env.FRONTEND_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+  if (configuredOrigins.includes(normalized)) return true;
   try {
     const parsed = new URL(origin);
     const hostname = parsed.hostname;
