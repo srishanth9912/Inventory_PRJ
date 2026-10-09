@@ -65,10 +65,10 @@ function serverPort(): number {
 
 export const env = {
   get MONGODB_URI() { return requiredMongoUri(); },
-  get DB_NAME() { return requiredEnv('DB_NAME'); },
+  get DB_NAME() { return process.env.DB_NAME?.trim() || 'inventory'; },
   get PORT() { return serverPort(); },
   get API_KEY() { return process.env.API_KEY || ''; },
-  get ADMIN_USERNAME() { return requiredEnv('ADMIN_USERNAME'); },
+  get ADMIN_USERNAME() { return process.env.ADMIN_USERNAME?.trim() || 'admin'; },
   get ADMIN_PASSWORD() { return requiredEnv('ADMIN_PASSWORD'); },
   get JWT_SECRET() { return requiredSecret('JWT_SECRET'); },
   get ACCESS_PIN() { return requiredAccessPin(); },
