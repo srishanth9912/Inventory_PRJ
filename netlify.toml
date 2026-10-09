@@ -1,14 +1,16 @@
-# Netlify Configuration for Inventory Management Frontend
-
 [build]
-  # Build inside the client directory
   base = "client"
-  # Folder containing the Vite production build output
   publish = "dist"
-  # Build command
   command = "npm run build"
 
-# SPA Fallback: route all requests to index.html to prevent 404 on refresh
+# Forward API requests to Render backend
+[[redirects]]
+  from = "/api/*"
+  to = "https://inventory-prj.onrender.com/:splat"
+  status = 200
+  force = true
+
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"

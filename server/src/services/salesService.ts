@@ -7,6 +7,7 @@ export interface CreateSaleParams {
   customerName?: string;
   phone?: string | null;
   notes?: string | null;
+  soldAt?: number | null;
   items: Array<{
     productId: string;
     unit: UnitType;
@@ -31,7 +32,7 @@ export async function getSales(limit = 25, customerId?: string, skip = 0): Promi
 }
 
 export async function createSale(params: CreateSaleParams): Promise<Sale> {
-  const { customerId, customerName, phone, notes, items } = params;
+  const { customerId, customerName, phone, notes, items, soldAt } = params;
 
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error('Add at least one product');
@@ -41,6 +42,7 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
   const client = getMongoClient();
 
   const now = Date.now();
+  const saleTimestamp = soldAt && !Number.isNaN(+soldAt) && +soldAt > 0 ? +soldAt : now;
   const lineItems: SaleItem[] = [];
   const neededPerProduct: Record<string, number> = {};
   let totalAmount = 0;
@@ -87,7 +89,7 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
     notes: (notes || '').trim() || null,
     items: lineItems,
     totalAmount,
-    soldAt: now,
+    soldAt: saleTimestamp,
     createdAt: now,
   };
 
@@ -119,7 +121,7 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
         unit: li.unit,
         quantity: li.quantity,
         pieces: -li.pieces,
-        at: now,
+        at: saleTimestamp,
       }));
       await stockLog.insertMany(logEntries, { session });
 

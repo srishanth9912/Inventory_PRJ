@@ -1,8 +1,7 @@
-// In production, requests go through the same-origin /api proxy function,
-// which forwards them to the backend configured via VITE_API_URL.
+// In production, requests go through the same-origin /api proxy function (or direct VITE_API_URL if set).
 // In development, the Vite dev server proxies requests to the local backend.
 const env = (import.meta as any).env;
-const API = env.DEV ? env.VITE_API_URL || '' : '/api';
+const API = env.DEV ? env.VITE_API_URL || '' : (env.VITE_API_URL || '/api');
 
 const TOKEN_KEY = 'ifb_admin_auth_token';
 

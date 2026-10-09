@@ -396,6 +396,8 @@ function NewSaleScreen({
   onBack: () => void;
   onSaved: () => void;
 }) {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [saleDate, setSaleDate] = useState<string>(todayStr);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [units, setUnits] = useState<Record<string, 'box' | 'piece'>>({});
   const [qtys, setQtys] = useState<Record<string, number | string>>({});
@@ -447,6 +449,17 @@ function NewSaleScreen({
         return;
       }
     }
+
+    let soldAtTimestamp: number | undefined = undefined;
+    if (saleDate && saleDate !== todayStr) {
+      const now = new Date();
+      const [y, m, d] = saleDate.split('-').map(Number);
+      if (y && m && d) {
+        const customDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        soldAtTimestamp = customDate.getTime();
+      }
+    }
+
     setSaving(true);
     setErr('');
     try {
@@ -455,6 +468,7 @@ function NewSaleScreen({
         customerName: customer,
         phone,
         notes,
+        soldAt: soldAtTimestamp,
         items: items.map((i) => ({
           productId: i.productId,
           unit: i.unit,
@@ -475,7 +489,19 @@ function NewSaleScreen({
       <button onClick={onBack} className="text-teal-700 mb-2 font-medium">
         ← Back
       </button>
-      <Title>New Sale</Title>
+      <div className="flex items-center justify-between mb-3">
+        <Title>New Sale</Title>
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-sm">
+          <span className="text-xs font-semibold text-slate-500">📅 Date:</span>
+          <input
+            type="date"
+            max={todayStr}
+            value={saleDate}
+            onChange={(e) => setSaleDate(e.target.value)}
+            className="text-xs font-semibold text-teal-800 bg-transparent focus:outline-none cursor-pointer"
+          />
+        </div>
+      </div>
       <Card className="mb-3">
         <div className="font-semibold mb-2">Select products</div>
         <div className="space-y-2">
