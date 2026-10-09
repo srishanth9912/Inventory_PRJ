@@ -31,10 +31,11 @@ export async function connectToDatabase(): Promise<{
 
   console.log(`Connecting to MongoDB Atlas database "${env.DB_NAME}"...`);
 
+  const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
   client = new MongoClient(env.MONGODB_URI, {
     serverSelectionTimeoutMS: 8000,
-    maxPoolSize: 20,
-    minPoolSize: 2,
+    maxPoolSize: isServerless ? 5 : 20,
+    minPoolSize: isServerless ? 0 : 2,
     connectTimeoutMS: 10000,
     maxIdleTimeMS: 60000,
   });

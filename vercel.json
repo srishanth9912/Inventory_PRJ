@@ -20,7 +20,19 @@
   },
   "rewrites": [
     {
+      "source": "/api",
+      "destination": {
+        "service": "server"
+      }
+    },
+    {
       "source": "/api/(.*)",
+      "destination": {
+        "service": "server"
+      }
+    },
+    {
+      "source": "/api/:path*",
       "destination": {
         "service": "server"
       }
