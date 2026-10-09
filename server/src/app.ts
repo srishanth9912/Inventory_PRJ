@@ -19,29 +19,27 @@ export async function buildApp(): Promise<FastifyInstance> {
     origin: (origin, callback) => callback(null, !origin || isOriginPermitted(origin)),
   });
 
-  // 2. Strip /api prefix if present from Vercel top-level rewrite
-  app.addHook('onRequest', async (req) => {
-    if (req.url.startsWith('/api/')) {
-      req.raw.url = req.url.substring(4);
-    } else if (req.url === '/api') {
-      req.raw.url = '/';
-    }
-  });
-
-  // 3. Authentication & security hook
+  // 2. Authentication & security hook
   app.addHook('onRequest', authHook);
 
   // 3. Centralized error handling
   app.setErrorHandler(errorHandler);
 
-  // 4. Register modular routes
-  await app.register(healthRoutes);
-  await app.register(authRoutes);
-  await app.register(productRoutes);
-  await app.register(stockRoutes);
-  await app.register(salesRoutes);
-  await app.register(customerRoutes);
-  await app.register(statsRoutes);
+  // 4. Register modular routes (both /api prefixed and direct base routes)
+  const routes = [
+    healthRoutes,
+    authRoutes,
+    productRoutes,
+    stockRoutes,
+    salesRoutes,
+    customerRoutes,
+    statsRoutes,
+  ];
+
+  for (const route of routes) {
+    await app.register(route, { prefix: '/api' });
+    await app.register(route);
+  }
 
   return app;
 }

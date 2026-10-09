@@ -4,7 +4,9 @@ import { verifyToken } from '../services/authService.js';
 
 export async function authHook(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (req.method === 'OPTIONS') return;
-  if (req.url === '/health' || req.url === '/db/status' || req.url.startsWith('/auth/')) return;
+
+  const path = req.url.replace(/^\/api/, '');
+  if (path === '/health' || path === '/db/status' || path.startsWith('/auth/')) return;
 
   // 1. API key header
   if (env.API_KEY) {
