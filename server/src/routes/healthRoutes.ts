@@ -1,72 +1,44 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getDb, getCollections } from '../db/connection.js';
-import type { HealthResponse, DbStatusResponse } from '../types/index.js';
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
   app.get('/health', async (_req, reply) => {
     try {
       const db = getDb();
-      const { products, sales, stockLog, customers } = getCollections();
-
-      const start = Date.now();
       await db.command({ ping: 1 });
 
-      const [prodCount, saleCount, logCount, custCount] = await Promise.all([
-        products.countDocuments(),
-        sales.countDocuments(),
-        stockLog.countDocuments(),
-        customers.countDocuments(),
-      ]);
-
-      const response: HealthResponse = {
+      return {
         ok: true,
-        database: 'connected',
-        target: 'MongoDB Atlas',
-        dbName: db.databaseName,
-        counts: {
-          products: prodCount,
-          sales: saleCount,
-          stockLogs: logCount,
-          customers: custCount,
-        },
-        latencyMs: Date.now() - start,
+        status: 'healthy',
         timestamp: Date.now(),
       };
-
-      return response;
-    } catch (err: any) {
+    } catch {
       return reply.code(503).send({
         ok: false,
-        database: 'disconnected',
-        error: err.message,
+        status: 'unhealthy',
       });
     }
   });
 
   app.get('/db/status', async () => {
-    const db = getDb();
     const { products, sales, stockLog, customers } = getCollections();
 
-    const [prods, saleCount, logCount, custCount] = await Promise.all([
-      products.find({}).toArray(),
+    const [prodCount, saleCount, logCount, custCount] = await Promise.all([
+      products.countDocuments(),
       sales.countDocuments(),
       stockLog.countDocuments(),
       customers.countDocuments(),
     ]);
 
-    const response: DbStatusResponse = {
-      database: 'MongoDB Atlas',
-      dbName: db.databaseName,
-      isCloud: true,
+    return {
+      status: 'healthy',
       collections: {
-        products: { count: prods.length, data: prods },
+        products: { count: prodCount },
         sales: { count: saleCount },
         stockLog: { count: logCount },
         customers: { count: custCount },
       },
-      status: 'healthy',
     };
-
-    return response;
   });
 };
+

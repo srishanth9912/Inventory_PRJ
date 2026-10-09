@@ -5,7 +5,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch --env-file=.env src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/tests/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

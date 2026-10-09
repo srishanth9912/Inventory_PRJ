@@ -1378,16 +1378,10 @@ function CodeEntryScreen({
         setAuthToken(res.token);
       }
       onUnlock(res.user || { username: 'admin', role: 'admin' });
-    } catch {
-      // Offline fallback: check local storage or default '123456'
-      const localPin = localStorage.getItem('inventory_access_code') || '123456';
-      if (pinToVerify === localPin) {
-        setAuthToken('local_auth_' + Date.now());
-        onUnlock({ username: 'admin', role: 'admin' });
-        return;
-      }
-
-      setError('Incorrect access code');
+    } catch (err: unknown) {
+      clearAuthToken();
+      const msg = err instanceof Error ? err.message : 'Unable to verify your PIN. Please try again.';
+      setError(msg);
       setShake(true);
       setTimeout(() => {
         setShake(false);
@@ -1514,6 +1508,7 @@ export default function App() {
   const [preselectedCustomer, setPreselectedCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const isFetchingRef = useRef(false);
 
   // Check auth session on startup
   useEffect(() => {
@@ -1543,6 +1538,8 @@ export default function App() {
   }, []);
 
   const load = useCallback(async (silent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       if (!silent) setError('');
       const [s, list, logs, customerList] = await Promise.all([
@@ -1557,10 +1554,14 @@ export default function App() {
       setCustomers(customerList);
       setError('');
     } catch (e: unknown) {
+      if (!getAuthToken()) {
+        setCurrentUser(null);
+      }
       if (!silent) {
         setError(e instanceof Error ? e.message : 'Cannot connect to server. Check internet & API settings.');
       }
     } finally {
+      isFetchingRef.current = false;
       if (!silent) setLoading(false);
     }
   }, []);
@@ -1581,23 +1582,29 @@ export default function App() {
     return () => clearInterval(timer);
   }, [currentUser, load]);
 
-  // Real-time Cloud Auto-Update: sync immediately on tab focus or visibility change
+  // Real-time Cloud Auto-Update: sync immediately on tab focus or visibility change (deduplicated)
   useEffect(() => {
     if (!currentUser) return;
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+    let lastRefresh = 0;
+    const triggerSync = () => {
+      const now = Date.now();
+      if (now - lastRefresh > 2000) {
+        lastRefresh = now;
         load(true);
       }
     };
-    const onFocus = () => {
-      load(true);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerSync();
+      }
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', triggerSync);
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', triggerSync);
     };
   }, [currentUser, load]);
 

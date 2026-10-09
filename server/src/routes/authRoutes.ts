@@ -5,6 +5,11 @@ import {
   verifyAccessCode,
   changeAdminPassword,
 } from '../services/authService.js';
+import {
+  checkPinRateLimit,
+  recordFailedPinAttempt,
+  recordSuccessfulPinAttempt,
+} from '../middleware/rateLimiter.js';
 
 interface LoginBody {
   username?: string;
@@ -19,21 +24,28 @@ interface ChangePasswordBody {
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // 6-digit PIN verify route
   app.post('/auth/verify-code', async (req: FastifyRequest<{ Body: { code?: string } }>, reply: FastifyReply) => {
+    if (!checkPinRateLimit(req, reply)) return;
+
     try {
       const { code = '' } = req.body || {};
       const result = await verifyAccessCode(code);
+      recordSuccessfulPinAttempt(req);
       return reply.code(200).send({
         ok: true,
         token: result.token,
         user: result.user,
       });
     } catch (err: unknown) {
+      recordFailedPinAttempt(req);
       const message = err instanceof Error ? err.message : 'Incorrect access code';
       return reply.code(401).send({ ok: false, error: message });
     }
   });
+
   // Login route
   app.post('/auth/login', async (req: FastifyRequest<{ Body: LoginBody }>, reply: FastifyReply) => {
+    if (!checkPinRateLimit(req, reply)) return;
+
     try {
       const { username = '', password = '' } = req.body || {};
       if (!username.trim() || !password) {
@@ -41,16 +53,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const result = await loginAdmin(username, password);
+      recordSuccessfulPinAttempt(req);
       return reply.code(200).send({
         ok: true,
         token: result.token,
         user: result.user,
       });
     } catch (err: unknown) {
+      recordFailedPinAttempt(req);
       const message = err instanceof Error ? err.message : 'Invalid credentials';
       return reply.code(401).send({ ok: false, error: message });
     }
   });
+
 
   // Verify token / get current admin user
   app.get('/auth/me', async (req: FastifyRequest, reply: FastifyReply) => {

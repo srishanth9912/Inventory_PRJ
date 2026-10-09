@@ -38,6 +38,9 @@ async function req(path: string, options: RequestInit = {}) {
     },
   });
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      clearAuthToken();
+    }
     const text = await res.text();
     let msg = text;
     try {

@@ -38,32 +38,62 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
     throw new Error('Add at least one product');
   }
 
-  const { products, sales, stockLog, customers } = getCollections();
-  const client = getMongoClient();
-
   const now = Date.now();
-  const saleTimestamp = soldAt && !Number.isNaN(+soldAt) && +soldAt > 0 ? +soldAt : now;
+  let saleTimestamp = now;
+  if (soldAt !== undefined && soldAt !== null) {
+    const ts = +soldAt;
+    if (!Number.isFinite(ts) || ts <= 0) {
+      throw new Error('Invalid sale date');
+    }
+    saleTimestamp = ts;
+  }
+
+  // Pre-validate line item types and values
+  for (const item of items) {
+    if (item.unit !== 'box' && item.unit !== 'piece') {
+      throw new Error(`Invalid unit "${item.unit}". Supported units are "box" and "piece".`);
+    }
+
+    const qty = +item.quantity;
+    if (!qty || qty <= 0 || !Number.isInteger(qty) || !Number.isFinite(qty)) {
+      throw new Error(`Invalid quantity`);
+    }
+
+    if (item.pricePerPiece != null) {
+      const price = +item.pricePerPiece;
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error('Price cannot be negative or invalid');
+      }
+    }
+  }
+
+  const { products, sales, stockLog, customers } = getCollections();
+
+  // Validate customer existence if customerId is provided
+  if (customerId) {
+    const filter = ObjectId.isValid(customerId)
+      ? { _id: new ObjectId(customerId) }
+      : { _id: customerId };
+    const existingCust = await customers.findOne(filter as any);
+    if (!existingCust) {
+      throw new Error(`Customer with ID "${customerId}" not found`);
+    }
+  }
+
   const lineItems: SaleItem[] = [];
   const neededPerProduct: Record<string, number> = {};
   let totalAmount = 0;
 
-  // 1. Validate line items and calculate pieces & totals
+  // 1. Validate line items against DB products and calculate pieces & totals
   for (const item of items) {
     const p = await products.findOne({ id: item.productId });
     if (!p) throw new Error(`Product "${item.productId}" not found`);
 
     const qty = +item.quantity;
-    if (!qty || qty <= 0 || !Number.isInteger(qty)) {
-      throw new Error(`Invalid quantity for ${p.name}`);
-    }
-
-    const unit: UnitType = item.unit === 'box' ? 'box' : 'piece';
+    const unit: UnitType = item.unit;
     const pieces = unit === 'box' ? qty * p.boxSize : qty;
     const price =
       item.pricePerPiece != null ? +item.pricePerPiece : p.defaultPricePerPiece;
-    if (Number.isNaN(price) || price < 0) {
-      throw new Error('Price cannot be negative');
-    }
 
     const lineTotal = pieces * price;
     totalAmount += lineTotal;
@@ -93,20 +123,24 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
     createdAt: now,
   };
 
-  // 3. Execute with MongoDB Multi-Document ACID Transaction
+  // 3. Execute with MongoDB Multi-Document ACID Transaction (or safe fallback)
+  const client = getMongoClient();
   const session = client.startSession();
+
   try {
-    await session.withTransaction(async () => {
+    const executeInSession = async (sess?: any) => {
+      const options = sess ? { session: sess } : {};
+
       // A. Verify and deduct stock atomically
       for (const [prodId, requiredPieces] of Object.entries(neededPerProduct)) {
         const updateRes = await products.updateOne(
           { id: prodId, currentStock: { $gte: requiredPieces } },
           { $inc: { currentStock: -requiredPieces }, $set: { updatedAt: now } },
-          { session }
+          options
         );
 
         if (updateRes.modifiedCount === 0) {
-          const prodDoc = await products.findOne({ id: prodId }, { session });
+          const prodDoc = await products.findOne({ id: prodId }, options);
           const available = prodDoc ? prodDoc.currentStock : 0;
           throw new Error(
             `Not enough stock for ${prodDoc?.name || prodId}. Available: ${available} pieces.`
@@ -123,10 +157,10 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
         pieces: -li.pieces,
         at: saleTimestamp,
       }));
-      await stockLog.insertMany(logEntries, { session });
+      await stockLog.insertMany(logEntries, options);
 
       // C. Insert the sale record
-      await sales.insertOne(sale, { session });
+      await sales.insertOne(sale, options);
 
       // D. Update or register customer metrics
       if (customerId) {
@@ -139,11 +173,11 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
             $inc: { totalOrders: 1, totalSpend: totalAmount },
             $set: { updatedAt: now },
           },
-          { session }
+          options
         );
       } else if (sale.customerName !== 'Walk-in' || sale.phone) {
         const existingCust = sale.phone
-          ? await customers.findOne({ phone: sale.phone }, { session })
+          ? await customers.findOne({ phone: sale.phone }, options)
           : null;
 
         if (existingCust) {
@@ -157,7 +191,7 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
               },
               $inc: { totalOrders: 1, totalSpend: totalAmount },
             },
-            { session }
+            options
           );
         } else {
           await customers.insertOne(
@@ -171,14 +205,30 @@ export async function createSale(params: CreateSaleParams): Promise<Sale> {
               createdAt: now,
               updatedAt: now,
             },
-            { session }
+            options
           );
         }
       }
-    });
+    };
+
+    try {
+      await session.withTransaction(async () => {
+        await executeInSession(session);
+      });
+    } catch (txErr: any) {
+      if (
+        txErr?.message?.includes('Transaction numbers are only allowed') ||
+        txErr?.message?.includes('replica set')
+      ) {
+        await executeInSession();
+      } else {
+        throw txErr;
+      }
+    }
   } finally {
     await session.endSession();
   }
 
   return sale;
 }
+

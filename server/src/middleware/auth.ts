@@ -1,17 +1,17 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { env, isOriginPermitted } from '../config/env.js';
+import { env } from '../config/env.js';
 import { verifyToken } from '../services/authService.js';
 
 export async function authHook(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (req.method === 'OPTIONS') return;
 
-  const path = req.url.replace(/^\/api/, '');
-  if (path === '/health' || path === '/db/status' || path.startsWith('/auth/')) return;
+  const path = req.url.split('?')[0]?.replace(/^\/api/, '') || '';
+  if (path === '/health' || path === '/auth/verify-code' || path === '/auth/login') {
+    return;
+  }
 
-  // 1. API key header
-  if (env.API_KEY) {
-    if (req.headers['x-api-key'] === env.API_KEY) return;
-    reply.code(401).send({ ok: false, error: 'Unauthorized: Invalid API key' });
+  // 1. API key header (if configured)
+  if (env.API_KEY && req.headers['x-api-key'] === env.API_KEY) {
     return;
   }
 
@@ -25,36 +25,6 @@ export async function authHook(req: FastifyRequest, reply: FastifyReply): Promis
     }
   }
 
-  // 3. Origin & Host check (allows trusted frontend origins and same-origin proxy requests)
-  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
-  if (origin) {
-    if (isOriginPermitted(origin)) return;
-  } else {
-    // Same-origin GET requests or Vercel/Netlify proxy rewrites do not send an Origin header
-    const rawHost = (
-      typeof req.headers['x-forwarded-host'] === 'string'
-        ? req.headers['x-forwarded-host']
-        : typeof req.headers.host === 'string'
-          ? req.headers.host
-          : ''
-    ).split(',')[0]?.trim() || '';
-
-    const hostname = rawHost.split(':')[0] || '';
-
-    if (
-      !hostname ||
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname.endsWith('.vercel.app') ||
-      hostname.endsWith('.netlify.app') ||
-      hostname.endsWith('.onrender.com') ||
-      Boolean(process.env.VERCEL) ||
-      Boolean(process.env.NETLIFY)
-    ) {
-      return;
-    }
-  }
-
-  reply.code(401).send({ ok: false, error: 'Unauthorized request origin' });
+  reply.code(401).send({ ok: false, error: 'Unauthorized: Missing or invalid authentication token' });
 }
+
