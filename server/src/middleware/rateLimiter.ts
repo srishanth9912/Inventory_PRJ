@@ -7,7 +7,7 @@ interface RateLimitEntry {
 
 const pinRateLimits = new Map<string, RateLimitEntry>();
 const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_MAP_ENTRIES = 5000;
 
 // Periodic cleanup of expired rate limit entries to prevent memory growth
