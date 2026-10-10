@@ -5,12 +5,20 @@ export function errorHandler(
   _req: FastifyRequest,
   reply: FastifyReply
 ): void {
-  const statusCode = error.statusCode || (error.message.includes('not found') ? 404 : 400);
+  const statusCode =
+    error.statusCode ||
+    (error.message?.includes('not found') ? 404 : error.message?.includes('Unauthorized') ? 401 : 400);
 
-  // Return standard JSON error format
+  // If internal 500 error, sanitize user message
+  const clientMessage =
+    statusCode >= 500
+      ? 'An unexpected error occurred. Please try again later.'
+      : error.message || 'Request failed';
+
   reply.code(statusCode).send({
     ok: false,
-    error: error.message || 'Internal Server Error',
+    error: clientMessage,
     statusCode,
   });
 }
+

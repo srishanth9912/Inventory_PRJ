@@ -129,4 +129,40 @@ describe('Stock & Sales Validation Unit Tests', () => {
       { message: /Invalid sale date/ }
     );
   });
+
+  test('createSale rejects empty items array or excessive items count', async () => {
+    await assert.rejects(
+      async () => {
+        await createSale({
+          items: [],
+        });
+      },
+      { message: /Add at least one product/ }
+    );
+
+    const excessiveItems = Array.from({ length: 101 }, (_, i) => ({
+      productId: `P${i}`,
+      unit: 'piece' as const,
+      quantity: 1,
+    }));
+
+    await assert.rejects(
+      async () => {
+        await createSale({
+          items: excessiveItems,
+        });
+      },
+      { message: /Cannot add more than 100 items/ }
+    );
+  });
+
+  test('updateProduct rejects invalid name and description bounds', async () => {
+    await assert.rejects(
+      async () => {
+        await updateProduct('P1', { name: '' });
+      },
+      { message: /Product name must be between 1 and 200 characters/ }
+    );
+  });
 });
+

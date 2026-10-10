@@ -59,6 +59,30 @@ async function req(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+export interface UpdateProductPayload {
+  name?: string;
+  description?: string;
+  imageUrl?: string;
+  defaultPricePerPiece?: number;
+  boxSize?: number;
+  currentStock?: number;
+  lowStockLimit?: number;
+}
+
+export interface CreateSalePayload {
+  customerId?: string | null;
+  customerName?: string;
+  phone?: string | null;
+  notes?: string | null;
+  soldAt?: number | null;
+  items: Array<{
+    productId: string;
+    unit: 'box' | 'piece';
+    quantity: number;
+    pricePerPiece?: number;
+  }>;
+}
+
 export const api = {
   verifyCode: (code: string) =>
     req('/auth/verify-code', {
@@ -78,7 +102,7 @@ export const api = {
     }),
   getHealth: () => req('/health'),
   getProducts: () => req('/products'),
-  updateProduct: (id: string, data: any) =>
+  updateProduct: (id: string, data: UpdateProductPayload) =>
     req(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addStock: (productId: string, unit: string, quantity: number) =>
     req('/stock/add', {
@@ -90,7 +114,7 @@ export const api = {
     if (customerId) q.set('customerId', customerId);
     return req(`/sales?${q.toString()}`);
   },
-  createSale: (data: any) =>
+  createSale: (data: CreateSalePayload) =>
     req('/sales', { method: 'POST', body: JSON.stringify(data) }),
   getStats: () => req('/stats'),
   getStockLog: (limit = 30) => req(`/stock/log?limit=${limit}`),

@@ -14,12 +14,12 @@ export async function createOrUpdateCustomer(input: {
   phone?: string;
   notes?: string;
 }): Promise<Customer> {
-  const name = String(input.name || '').trim();
-  const phone = String(input.phone || '').trim();
-  const notes = String(input.notes || '').trim();
+  const name = String(input.name || '').trim().slice(0, 100);
+  const phone = String(input.phone || '').trim().slice(0, 25);
+  const notes = String(input.notes || '').trim().slice(0, 500);
 
   if (!name) throw new Error('Customer name is required');
-  if (phone && !/^[+0-9()\-\s]{7,20}$/.test(phone)) {
+  if (phone && !/^[+0-9()\-\s]{7,25}$/.test(phone)) {
     throw new Error('Enter a valid phone number');
   }
 
@@ -63,19 +63,29 @@ export async function updateCustomerById(
 
   const updates: Record<string, unknown> = { updatedAt: Date.now() };
   if (data.name !== undefined) {
-    const name = String(data.name).trim();
+    const name = String(data.name).trim().slice(0, 100);
     if (!name) throw new Error('Customer name cannot be empty');
     updates.name = name;
   }
   if (data.phone !== undefined) {
-    const phone = String(data.phone).trim();
-    if (phone && !/^[+0-9()\-\s]{7,20}$/.test(phone)) {
-      throw new Error('Enter a valid phone number');
+    const phone = String(data.phone).trim().slice(0, 25);
+    if (phone) {
+      if (!/^[+0-9()\-\s]{7,25}$/.test(phone)) {
+        throw new Error('Enter a valid phone number');
+      }
+      // Check for phone number conflicts with other customers
+      const conflict = await customers.findOne({
+        phone,
+        _id: { $ne: current._id },
+      } as any);
+      if (conflict) {
+        throw new Error('This phone number is already associated with another customer');
+      }
     }
     updates.phone = phone || null;
   }
   if (data.notes !== undefined) {
-    updates.notes = String(data.notes).trim() || null;
+    updates.notes = String(data.notes).trim().slice(0, 500) || null;
   }
 
   await customers.updateOne(filter as any, { $set: updates });
@@ -90,3 +100,4 @@ export async function deleteCustomer(id: string): Promise<boolean> {
   const res = await customers.deleteOne(filter as any);
   return res.deletedCount > 0;
 }
+

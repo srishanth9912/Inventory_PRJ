@@ -20,25 +20,34 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get('/db/status', async () => {
-    const { products, sales, stockLog, customers } = getCollections();
+  app.get('/db/status', async (_req, reply) => {
+    try {
+      const { products, sales, stockLog, customers } = getCollections();
 
-    const [prodCount, saleCount, logCount, custCount] = await Promise.all([
-      products.countDocuments(),
-      sales.countDocuments(),
-      stockLog.countDocuments(),
-      customers.countDocuments(),
-    ]);
+      const [prodCount, saleCount, logCount, custCount] = await Promise.all([
+        products.countDocuments(),
+        sales.countDocuments(),
+        stockLog.countDocuments(),
+        customers.countDocuments(),
+      ]);
 
-    return {
-      status: 'healthy',
-      collections: {
-        products: { count: prodCount },
-        sales: { count: saleCount },
-        stockLog: { count: logCount },
-        customers: { count: custCount },
-      },
-    };
+      return {
+        ok: true,
+        status: 'healthy',
+        collections: {
+          products: { count: prodCount },
+          sales: { count: saleCount },
+          stockLog: { count: logCount },
+          customers: { count: custCount },
+        },
+      };
+    } catch {
+      return reply.code(500).send({
+        ok: false,
+        status: 'degraded',
+        error: 'Database diagnostic query failed',
+      });
+    }
   });
 };
 

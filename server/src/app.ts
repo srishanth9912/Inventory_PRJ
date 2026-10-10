@@ -19,10 +19,18 @@ export async function buildApp(): Promise<FastifyInstance> {
     origin: (origin, callback) => callback(null, !origin || isOriginPermitted(origin)),
   });
 
-  // 2. Authentication & security hook
+  // 2. Security headers hook
+  app.addHook('onSend', async (_req, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('X-XSS-Protection', '1; mode=block');
+  });
+
+  // 3. Authentication & security hook
   app.addHook('onRequest', authHook);
 
-  // 3. Centralized error handling
+  // 4. Centralized error handling
   app.setErrorHandler(errorHandler);
 
   // 4. Register modular routes (both /api prefixed and direct base routes)

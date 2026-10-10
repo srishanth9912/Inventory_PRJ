@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { test, describe, before, after } from 'node:test';
 import { buildApp } from '../app.js';
 import { createToken } from '../services/authService.js';
@@ -118,6 +119,46 @@ describe('Authentication & Authorization Hardening Tests', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/db/status',
+    });
+
+    assert.equal(res.statusCode, 401);
+  });
+
+  test('Protected endpoint rejects algorithm none JWT attack', async () => {
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(
+      JSON.stringify({ username: 'admin', role: 'admin', exp: Date.now() + 10000 })
+    ).toString('base64url');
+    const fakeToken = `${header}.${body}.`;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/products',
+      headers: {
+        authorization: `Bearer ${fakeToken}`,
+      },
+    });
+
+    assert.equal(res.statusCode, 401);
+  });
+
+  test('Protected endpoint rejects expired JWT tokens', async () => {
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(
+      JSON.stringify({ username: 'admin', role: 'admin', exp: Date.now() - 10000 })
+    ).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', process.env.JWT_SECRET || '0123456789012345678901234567890123456789')
+      .update(`${header}.${body}`)
+      .digest('base64url');
+    const expiredToken = `${header}.${body}.${signature}`;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/products',
+      headers: {
+        authorization: `Bearer ${expiredToken}`,
+      },
     });
 
     assert.equal(res.statusCode, 401);

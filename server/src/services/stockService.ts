@@ -6,16 +6,21 @@ export async function addStock(
   unit: UnitType,
   quantity: number
 ): Promise<Product> {
-  const qty = +quantity;
+  const pId = String(productId || '').trim();
+  const qty = Number(quantity);
+
+  if (!pId || pId.length > 100) {
+    throw new Error('Valid product ID is required');
+  }
   if (unit !== 'box' && unit !== 'piece') {
     throw new Error('Invalid unit. Must be "box" or "piece".');
   }
-  if (!productId || !qty || qty <= 0 || !Number.isInteger(qty) || !Number.isFinite(qty)) {
+  if (!Number.isInteger(qty) || !Number.isFinite(qty) || qty <= 0 || qty > 1000000) {
     throw new Error('Invalid quantity. Must be a positive integer.');
   }
 
   const { products, stockLog } = getCollections();
-  const p = await products.findOne({ id: productId });
+  const p = await products.findOne({ id: pId });
   if (!p) {
     throw new Error('Product not found');
   }
@@ -30,7 +35,7 @@ export async function addStock(
     const executeInSession = async (sess?: any) => {
       const options = sess ? { session: sess } : {};
       const updateRes = await products.updateOne(
-        { id: productId },
+        { id: pId },
         { $inc: { currentStock: pieces }, $set: { updatedAt: now } },
         options
       );
@@ -38,17 +43,28 @@ export async function addStock(
         throw new Error('Product not found');
       }
 
-      await stockLog.insertOne(
-        {
-          productId,
-          type: 'add',
-          unit: unit === 'box' ? 'box' : 'piece',
-          quantity: qty,
-          pieces,
-          at: now,
-        },
-        options
-      );
+      try {
+        await stockLog.insertOne(
+          {
+            productId: pId,
+            type: 'add',
+            unit: unit === 'box' ? 'box' : 'piece',
+            quantity: qty,
+            pieces,
+            at: now,
+          },
+          options
+        );
+      } catch (logErr) {
+        // If not running in a MongoDB transaction, compensate by reverting product stock update
+        if (!sess) {
+          await products.updateOne(
+            { id: pId },
+            { $inc: { currentStock: -pieces } }
+          );
+        }
+        throw logErr;
+      }
     };
 
     try {
@@ -69,7 +85,7 @@ export async function addStock(
     await session.endSession();
   }
 
-  const updated = await products.findOne({ id: productId });
+  const updated = await products.findOne({ id: pId });
   if (!updated) throw new Error('Product not found after adding stock');
   return updated;
 }
